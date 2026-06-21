@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import "./styles.css";
 import { StagePlan } from "./components/StagePlan";
 import { CueList } from "./components/CueList";
@@ -8,9 +8,21 @@ import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
 import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
 import { DataImportPreview } from "./components/DataImportPreview";
+import { DraftBanner, type DraftBannerMode } from "./components/DraftBanner";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
+import {
+  saveDraft,
+  loadDraft,
+  loadDraftMeta,
+  clearDraft,
+  draftExists,
+  dataDiffersFromInitial,
+  exportDraftAsJson,
+  type DraftData,
+  type DraftMeta,
+} from "./utils/draft";
 
 const project = {
   "sourceNo": 2,
@@ -46,6 +58,12 @@ const project = {
   ],
 };
 
+const INITIAL_DRAFT_DATA: DraftData = {
+  fixtures: FIXTURES,
+  cues: INITIAL_CUES,
+  versionNotes: INITIAL_VERSION_NOTES,
+};
+
 function App() {
   const [fixtures, setFixtures] = useState<LightFixture[]>(FIXTURES);
   const [selectedFixtureIds, setSelectedFixtureIds] = useState<Set<string>>(new Set());
@@ -57,6 +75,73 @@ function App() {
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
   const [importOpen, setImportOpen] = useState(false);
   const transitionLockRef = useRef<number>(0);
+
+  const [draftBannerMode, setDraftBannerMode] = useState<DraftBannerMode>(() => {
+    if (!draftExists()) return "none";
+    return "restore";
+  });
+  const [draftMeta, setDraftMeta] = useState<DraftMeta | null>(() => loadDraftMeta());
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const getCurrentDraftData = useCallback((): DraftData => {
+    return { fixtures, cues, versionNotes };
+  }, [fixtures, cues, versionNotes]);
+
+  useEffect(() => {
+    if (draftBannerMode === "restore") return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      const data = { fixtures, cues, versionNotes };
+      const hasChanges = dataDiffersFromInitial(data, INITIAL_DRAFT_DATA);
+      if (hasChanges) {
+        const ok = saveDraft(data);
+        if (ok) {
+          setDraftMeta(loadDraftMeta());
+          setDraftBannerMode("unsaved");
+          setSavedFlash(true);
+          setTimeout(() => setSavedFlash(false), 2000);
+        }
+      } else {
+        clearDraft();
+        setDraftMeta(null);
+        setDraftBannerMode("none");
+      }
+    }, 800);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [fixtures, cues, versionNotes, draftBannerMode]);
+
+  const handleRestoreDraft = useCallback(() => {
+    const draft = loadDraft();
+    if (draft) {
+      setFixtures(draft.fixtures);
+      setCues(draft.cues);
+      setVersionNotes(draft.versionNotes);
+    }
+    setDraftBannerMode("unsaved");
+    setDraftMeta(loadDraftMeta());
+  }, []);
+
+  const handleDiscardDraft = useCallback(() => {
+    clearDraft();
+    setDraftMeta(null);
+    setDraftBannerMode("none");
+    setFixtures(FIXTURES);
+    setCues(INITIAL_CUES);
+    setVersionNotes(INITIAL_VERSION_NOTES);
+  }, []);
+
+  const handleExportDraft = useCallback(() => {
+    const data = getCurrentDraftData();
+    exportDraftAsJson(data, draftMeta);
+  }, [getCurrentDraftData, draftMeta]);
 
   const selectedCue = cues.find((c) => c.id === selectedCueId) ?? null;
 
@@ -175,8 +260,20 @@ function App() {
     setImportOpen(false);
   }, []);
 
+  const effectiveBannerMode: DraftBannerMode = savedFlash
+    ? "saved"
+    : draftBannerMode;
+
   return (
     <main className="app">
+      <DraftBanner
+        mode={effectiveBannerMode}
+        draftMeta={draftMeta}
+        onRestore={handleRestoreDraft}
+        onDiscard={handleDiscardDraft}
+        onExport={handleExportDraft}
+      />
+
       <section className="hero">
         <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
         <h1>{project.title}</h1>

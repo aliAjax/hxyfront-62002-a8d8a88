@@ -103,29 +103,29 @@ function parseFixtureNumbers(text: string): string[] {
   return numbers;
 }
 
-export function parseCueFixtures(cue: Cue): LightFixture[] {
+export function parseCueFixtures(cue: Cue, allFixtures: LightFixture[] = FIXTURES): LightFixture[] {
   if (!cue || !cue.fixtures || !cue.fixtures.trim()) return [];
 
   const text = cue.fixtures.trim();
 
   if (text === "全台" || text === "全台灯具") {
-    return [...FIXTURES];
+    return [...allFixtures];
   }
 
   for (const [keyword, lightType] of Object.entries(TYPE_KEYWORDS)) {
     if (text.includes(keyword) || text.includes(`全台${keyword}`)) {
-      return FIXTURES.filter((f) => f.type === lightType);
+      return allFixtures.filter((f) => f.type === lightType);
     }
   }
 
   const channels = parseChannelRange(text);
   if (channels.length > 0) {
-    return FIXTURES.filter((f) => channels.includes(f.channel.toUpperCase()));
+    return allFixtures.filter((f) => channels.includes(f.channel.toUpperCase()));
   }
 
   const fixtureNumbers = parseFixtureNumbers(text);
   if (fixtureNumbers.length > 0) {
-    return FIXTURES.filter((f) => fixtureNumbers.includes(f.number.toUpperCase()));
+    return allFixtures.filter((f) => fixtureNumbers.includes(f.number.toUpperCase()));
   }
 
   return [];

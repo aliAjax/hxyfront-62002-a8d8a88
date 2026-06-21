@@ -1,21 +1,37 @@
 import { useState } from "react";
-import { FIXTURES, LIGHT_TYPE_COLORS, type LightFixture, type LightType } from "../data/fixtures";
+import { LIGHT_TYPE_COLORS, type LightFixture, type LightType } from "../data/fixtures";
 import { LightDetailPanel } from "./LightDetailPanel";
 
 const STAGE_VIEWBOX = "0 0 900 600";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
 
-export function StagePlan() {
-  const [selected, setSelected] = useState<LightFixture | null>(null);
+interface Props {
+  fixtures: LightFixture[];
+  selectedFixtureIds: Set<string>;
+  onToggleFixtureSelection: (id: string) => void;
+}
+
+export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelection }: Props) {
+  const [detailFixture, setDetailFixture] = useState<LightFixture | null>(null);
   const [filter, setFilter] = useState<LightType | null>(null);
 
   const filtered = filter
-    ? FIXTURES.filter((f) => f.type === filter)
-    : FIXTURES;
+    ? fixtures.filter((f) => f.type === filter)
+    : fixtures;
 
-  const handleFixtureClick = (fixture: LightFixture) => {
-    setSelected((prev) => (prev?.id === fixture.id ? null : fixture));
+  const handleFixtureClick = (fixture: LightFixture, e: React.MouseEvent) => {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      onToggleFixtureSelection(fixture.id);
+    } else {
+      setDetailFixture((prev) => (prev?.id === fixture.id ? null : fixture));
+    }
+  };
+
+  const handleFixtureRightClick = (fixture: LightFixture, e: React.MouseEvent) => {
+    e.preventDefault();
+    onToggleFixtureSelection(fixture.id);
   };
 
   return (
@@ -25,27 +41,34 @@ export function StagePlan() {
           <p className="stage-plan-label">灯位布局</p>
           <h2>舞台平面灯位图</h2>
         </div>
-        <div className="stage-plan-chips">
-          <button
-            className={!filter ? "chip active" : "chip"}
-            onClick={() => setFilter(null)}
-          >
-            全部
-          </button>
-          {ALL_TYPES.map((t) => (
+        <div className="stage-plan-header-right">
+          {selectedFixtureIds.size > 0 && (
+            <span className="stage-plan-selection-badge">
+              已选 {selectedFixtureIds.size} 台灯具
+            </span>
+          )}
+          <div className="stage-plan-chips">
             <button
-              key={t}
-              className={filter === t ? "chip active" : "chip"}
-              style={
-                filter === t
-                  ? { background: LIGHT_TYPE_COLORS[t], borderColor: LIGHT_TYPE_COLORS[t], color: "#fff" }
-                  : {}
-              }
-              onClick={() => setFilter(filter === t ? null : t)}
+              className={!filter ? "chip active" : "chip"}
+              onClick={() => setFilter(null)}
             >
-              {t}
+              全部
             </button>
-          ))}
+            {ALL_TYPES.map((t) => (
+              <button
+                key={t}
+                className={filter === t ? "chip active" : "chip"}
+                style={
+                  filter === t
+                    ? { background: LIGHT_TYPE_COLORS[t], borderColor: LIGHT_TYPE_COLORS[t], color: "#fff" }
+                    : {}
+                }
+                onClick={() => setFilter(filter === t ? null : t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -88,17 +111,22 @@ export function StagePlan() {
 
             {filtered.map((fixture) => {
               const color = LIGHT_TYPE_COLORS[fixture.type];
-              const isSelected = selected?.id === fixture.id;
+              const isSelected = selectedFixtureIds.has(fixture.id);
+              const isDetailOpen = detailFixture?.id === fixture.id;
               const isOff = fixture.brightness === 0;
               const radius = isOff ? 8 : 10 + (fixture.brightness / 100) * 4;
 
               return (
                 <g
                   key={fixture.id}
-                  className="fixture-group"
-                  onClick={() => handleFixtureClick(fixture)}
+                  className={`fixture-group${isSelected ? " fixture-selected" : ""}`}
+                  onClick={(e) => handleFixtureClick(fixture, e)}
+                  onContextMenu={(e) => handleFixtureRightClick(fixture, e)}
                   style={{ cursor: "pointer" }}
                 >
+                  {isSelected && (
+                    <circle cx={fixture.x} cy={fixture.y} r={radius + 10} fill="none" stroke="#7c3aed" strokeWidth="2" strokeDasharray="4 2" />
+                  )}
                   {fixture.brightness > 0 && (
                     <circle cx={fixture.x} cy={fixture.y} r={radius + 6} fill={color} opacity={fixture.brightness / 300} filter="url(#glow)" />
                   )}
@@ -107,8 +135,8 @@ export function StagePlan() {
                     cy={fixture.y}
                     r={radius}
                     fill={isOff ? "#e2e8f0" : color}
-                    stroke={isSelected ? "#fff" : "transparent"}
-                    strokeWidth={isSelected ? 3 : 0}
+                    stroke={isDetailOpen ? "#fff" : isSelected ? "#7c3aed" : "transparent"}
+                    strokeWidth={isDetailOpen || isSelected ? 3 : 0}
                     opacity={isOff ? 0.5 : 1}
                   />
                   <circle cx={fixture.x} cy={fixture.y} r={radius - 3} fill={isOff ? "#cbd5e1" : "#fff"} opacity={0.9} />
@@ -125,6 +153,7 @@ export function StagePlan() {
           </svg>
 
           <div className="stage-plan-legend">
+            <span className="legend-hint">Shift/Ctrl+点击 或 右键 多选灯具</span>
             {ALL_TYPES.map((t) => (
               <span key={t} className="legend-item">
                 <span className="legend-dot" style={{ background: LIGHT_TYPE_COLORS[t] }} />
@@ -134,7 +163,7 @@ export function StagePlan() {
           </div>
         </div>
 
-        <LightDetailPanel fixture={selected} onClose={() => setSelected(null)} />
+        <LightDetailPanel fixture={detailFixture} onClose={() => setDetailFixture(null)} />
       </div>
     </section>
   );

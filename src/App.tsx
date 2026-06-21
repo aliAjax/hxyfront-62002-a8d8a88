@@ -5,7 +5,8 @@ import { CueList } from "./components/CueList";
 import { CueEditDrawer } from "./components/CueEditDrawer";
 import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
-import { FIXTURES } from "./data/fixtures";
+import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
+import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
 
@@ -44,6 +45,8 @@ const project = {
 };
 
 function App() {
+  const [fixtures, setFixtures] = useState<LightFixture[]>(FIXTURES);
+  const [selectedFixtureIds, setSelectedFixtureIds] = useState<Set<string>>(new Set());
   const [cues, setCues] = useState<Cue[]>(INITIAL_CUES);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
@@ -54,11 +57,44 @@ function App() {
   const selectedCue = cues.find((c) => c.id === selectedCueId) ?? null;
 
   const metricValues = [
-    FIXTURES.length,
+    fixtures.length,
     cues.length,
     cues.length > 0 ? cues[cues.length - 1].number : "无",
     versionNotes.filter((n) => !n.confirmed).length,
   ];
+
+  const handleUpdateFixtures = useCallback((updates: Partial<LightFixture> & { id: string }[]) => {
+    setFixtures((prev) => {
+      const next = [...prev];
+      for (const update of updates) {
+        const idx = next.findIndex((f) => f.id === update.id);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...update };
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleFixtureSelection = useCallback((fixtureId: string) => {
+    setSelectedFixtureIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fixtureId)) {
+        next.delete(fixtureId);
+      } else {
+        next.add(fixtureId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSetSelectedFixtures = useCallback((ids: Set<string>) => {
+    setSelectedFixtureIds(ids);
+  }, []);
+
+  const handleClearSelectedFixtures = useCallback(() => {
+    setSelectedFixtureIds(new Set());
+  }, []);
 
   const handleAddCue = () => {
     setEditingCue(null);
@@ -112,11 +148,24 @@ function App() {
         ))}
       </section>
 
-      <StagePlan />
+      <FixtureBatchWorkspace
+        fixtures={fixtures}
+        selectedFixtureIds={selectedFixtureIds}
+        onToggleSelection={handleToggleFixtureSelection}
+        onSetSelectedFixtures={handleSetSelectedFixtures}
+        onClearSelectedFixtures={handleClearSelectedFixtures}
+        onUpdateFixtures={handleUpdateFixtures}
+      />
+
+      <StagePlan
+        fixtures={fixtures}
+        selectedFixtureIds={selectedFixtureIds}
+        onToggleFixtureSelection={handleToggleFixtureSelection}
+      />
 
       <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} selectedCueId={selectedCueId} onSelect={handleSelectCue} />
 
-      <ScenePreview cue={selectedCue} />
+      <ScenePreview cue={selectedCue} fixtures={fixtures} />
 
       <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 

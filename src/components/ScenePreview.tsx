@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { type Cue, parseCueFixtures, parseCueBrightness, hasBrightnessField } from "../data/cues";
-import { LIGHT_TYPE_COLORS, type LightType } from "../data/fixtures";
+import { LIGHT_TYPE_COLORS, type LightType, type LightFixture } from "../data/fixtures";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
 
@@ -33,9 +33,10 @@ function focusToAngle(focus: string): number {
 
 interface Props {
   cue: Cue | null;
+  fixtures: LightFixture[];
 }
 
-export function ScenePreview({ cue }: Props) {
+export function ScenePreview({ cue, fixtures }: Props) {
   const [animatedBrightness, setAnimatedBrightness] = useState<Record<string, number>>({});
   const [transitioning, setTransitioning] = useState(false);
   const currentBrightnessRef = useRef<Record<string, number>>({});
@@ -43,7 +44,7 @@ export function ScenePreview({ cue }: Props) {
   const rafRef = useRef<number>(0);
   const prevCueIdRef = useRef<string | null>(null);
 
-  const cueFixtures = useMemo(() => (cue ? parseCueFixtures(cue) : []), [cue]);
+  const cueFixtures = useMemo(() => (cue ? parseCueFixtures(cue, fixtures) : []), [cue, fixtures]);
   const cueBrightness = useMemo(() => (cue ? parseCueBrightness(cue) : null), [cue]);
   const brightnessFieldSet = useMemo(() => (cue ? hasBrightnessField(cue) : false), [cue]);
   const brightnessInvalid = brightnessFieldSet && cueBrightness === null;

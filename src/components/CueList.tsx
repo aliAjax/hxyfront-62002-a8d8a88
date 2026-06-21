@@ -4,9 +4,11 @@ interface Props {
   cues: Cue[];
   onAdd: () => void;
   onEdit: (cue: Cue) => void;
+  selectedCueId?: string | null;
+  onSelect?: (cue: Cue) => void;
 }
 
-export function CueList({ cues, onAdd, onEdit }: Props) {
+export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props) {
   return (
     <section className="panel cue-list-panel">
       <div className="heading">
@@ -24,30 +26,44 @@ export function CueList({ cues, onAdd, onEdit }: Props) {
             <p>暂无Cue，点击"新增Cue"添加</p>
           </div>
         ) : (
-          cues.map((cue, index) => (
-            <article key={cue.id} className="cue-item">
-              <b className="cue-index">{String(index + 1).padStart(2, "0")}</b>
-              <div className="cue-info">
-                <div className="cue-main">
-                  <h3>{cue.number}</h3>
-                  <span className="cue-scene">{cue.sceneName}</span>
+          cues.map((cue, index) => {
+            const isSelected = selectedCueId === cue.id;
+            return (
+              <article
+                key={cue.id}
+                className={`cue-item ${isSelected ? "cue-item-selected" : ""}`}
+                onClick={() => onSelect && onSelect(cue)}
+                style={{ cursor: onSelect ? "pointer" : "default" }}
+              >
+                <b className="cue-index">{String(index + 1).padStart(2, "0")}</b>
+                <div className="cue-info">
+                  <div className="cue-main">
+                    <h3>{cue.number}</h3>
+                    <span className="cue-scene">{cue.sceneName}</span>
+                  </div>
+                  <div className="cue-detail">
+                    <span className="cue-fixtures">灯具: {cue.fixtures}</span>
+                    <span className="cue-brightness">{cue.brightnessChange}</span>
+                  </div>
+                  {cue.triggerNote && (
+                    <p className="cue-trigger">触发: {cue.triggerNote}</p>
+                  )}
+                  {cue.versionNote && (
+                    <span className="cue-version">{cue.versionNote}</span>
+                  )}
                 </div>
-                <div className="cue-detail">
-                  <span className="cue-fixtures">灯具: {cue.fixtures}</span>
-                  <span className="cue-brightness">{cue.brightnessChange}</span>
-                </div>
-                {cue.triggerNote && (
-                  <p className="cue-trigger">触发: {cue.triggerNote}</p>
-                )}
-                {cue.versionNote && (
-                  <span className="cue-version">{cue.versionNote}</span>
-                )}
-              </div>
-              <button className="cue-edit-btn" onClick={() => onEdit(cue)}>
-                编辑
-              </button>
-            </article>
-          ))
+                <button
+                  className="cue-edit-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(cue);
+                  }}
+                >
+                  编辑
+                </button>
+              </article>
+            );
+          })
         )}
       </div>
     </section>

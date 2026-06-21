@@ -4,6 +4,7 @@ import { StagePlan } from "./components/StagePlan";
 import { CueList } from "./components/CueList";
 import { CueEditDrawer } from "./components/CueEditDrawer";
 import { VersionNotesPanel } from "./components/VersionNotesPanel";
+import { ScenePreview } from "./components/ScenePreview";
 import { FIXTURES } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
@@ -47,11 +48,12 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
   const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
+  const [selectedCue, setSelectedCue] = useState<Cue | null>(cues.length > 0 ? cues[0] : null);
 
   const metricValues = [
     FIXTURES.length,
     cues.length,
-    cues.length > 0 ? cues[cues.length - 1].number : "无",
+    selectedCue ? selectedCue.number : (cues.length > 0 ? cues[cues.length - 1].number : "无"),
     versionNotes.filter((n) => !n.confirmed).length,
   ];
 
@@ -70,15 +72,26 @@ function App() {
     setEditingCue(null);
   };
 
+  const handleSelectCue = (cue: Cue) => {
+    setSelectedCue(cue);
+  };
+
   const handleSaveCue = (cue: Cue) => {
     setCues((prev) => {
       const existingIndex = prev.findIndex((c) => c.id === cue.id);
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex] = cue;
+        if (selectedCue?.id === cue.id) {
+          setSelectedCue(cue);
+        }
         return updated;
       } else {
-        return [...prev, cue];
+        const newCues = [...prev, cue];
+        if (!selectedCue) {
+          setSelectedCue(cue);
+        }
+        return newCues;
       }
     });
     handleCloseDrawer();
@@ -103,7 +116,19 @@ function App() {
 
       <StagePlan />
 
-      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} />
+      <ScenePreview
+        cue={selectedCue}
+        allCues={cues}
+        onCueChange={handleSelectCue}
+      />
+
+      <CueList
+        cues={cues}
+        onAdd={handleAddCue}
+        onEdit={handleEditCue}
+        selectedCueId={selectedCue?.id ?? null}
+        onSelect={handleSelectCue}
+      />
 
       <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 

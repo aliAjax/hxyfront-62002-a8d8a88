@@ -14,6 +14,7 @@ import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
 import {
   saveDraft,
+  loadDraft,
   loadDraftMeta,
   clearDraft,
   draftExists,
@@ -69,13 +70,25 @@ const INITIAL_DRAFT_DATA: DraftData = {
   versionNotes: INITIAL_VERSION_NOTES,
 };
 
+function getInitialAppData(): DraftData {
+  if (pendingRestoreDraftExists()) {
+    return loadDraft() ?? INITIAL_DRAFT_DATA;
+  }
+  return INITIAL_DRAFT_DATA;
+}
+
 function App() {
-  const [fixtures, setFixtures] = useState<LightFixture[]>(FIXTURES);
+  const initialAppDataRef = useRef<DraftData | null>(null);
+  if (!initialAppDataRef.current) {
+    initialAppDataRef.current = getInitialAppData();
+  }
+
+  const [fixtures, setFixtures] = useState<LightFixture[]>(() => initialAppDataRef.current!.fixtures);
   const [selectedFixtureIds, setSelectedFixtureIds] = useState<Set<string>>(new Set());
-  const [cues, setCues] = useState<Cue[]>(INITIAL_CUES);
+  const [cues, setCues] = useState<Cue[]>(() => initialAppDataRef.current!.cues);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
-  const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
+  const [versionNotes, setVersionNotes] = useState<VersionNote[]>(() => initialAppDataRef.current!.versionNotes);
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
   const [importOpen, setImportOpen] = useState(false);
@@ -95,7 +108,9 @@ function App() {
     return pending ?? loadDraftMeta();
   });
   const [savedFlash, setSavedFlash] = useState(false);
-  const [editsMadeDuringRestore, setEditsMadeDuringRestore] = useState(false);
+  const [editsMadeDuringRestore, setEditsMadeDuringRestore] = useState(() =>
+    pendingRestoreDraftExists() && dataDiffersFromInitial(initialAppDataRef.current!, INITIAL_DRAFT_DATA)
+  );
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

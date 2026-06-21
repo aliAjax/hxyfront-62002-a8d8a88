@@ -7,7 +7,7 @@ import { CueEditDrawer } from "./components/CueEditDrawer";
 import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
 import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
-import { ImportPreview } from "./components/ImportPreview";
+import { DataImportPreview } from "./components/DataImportPreview";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
@@ -151,12 +151,22 @@ function App() {
     setCues(newCues);
   }, []);
 
-  const handleImportFixtures = useCallback((mergedFixtures: LightFixture[], _importedFixtures: LightFixture[]) => {
-    setFixtures(mergedFixtures);
+  const handleImportClick = useCallback(() => {
+    setImportOpen(true);
   }, []);
 
-  const handleImportCues = useCallback((mergedCues: Cue[], _importedCues: Cue[]) => {
-    setCues(mergedCues);
+  const handleImportClose = useCallback(() => {
+    setImportOpen(false);
+  }, []);
+
+  const handleImportConfirm = useCallback((data: { fixtures: LightFixture[]; cues: Cue[] }) => {
+    if (data.fixtures.length > 0) {
+      setFixtures((prev) => [...prev, ...data.fixtures]);
+    }
+    if (data.cues.length > 0) {
+      setCues((prev) => [...prev, ...data.cues]);
+    }
+    setImportOpen(false);
   }, []);
 
   return (
@@ -189,7 +199,7 @@ function App() {
         fixtures={fixtures}
         selectedFixtureIds={selectedFixtureIds}
         onToggleFixtureSelection={handleToggleFixtureSelection}
-        onImportClick={() => setImportOpen(true)}
+        onImportClick={handleImportClick}
       />
 
       {cueViewMode === "list" ? (
@@ -230,13 +240,11 @@ function App() {
         onSave={handleSaveCue}
       />
 
-      <ImportPreview
+      <DataImportPreview
         open={importOpen}
         existingFixtures={fixtures}
-        existingCues={cues}
-        onClose={() => setImportOpen(false)}
-        onImportFixtures={handleImportFixtures}
-        onImportCues={handleImportCues}
+        onClose={handleImportClose}
+        onConfirm={handleImportConfirm}
       />
     </main>
   );

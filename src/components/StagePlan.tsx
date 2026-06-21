@@ -43,20 +43,20 @@ export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelecti
           <h2>舞台平面灯位图</h2>
         </div>
         <div className="stage-plan-header-right">
-          {onImportClick && (
-            <button className="import-launcher" onClick={onImportClick}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              导入数据
-            </button>
-          )}
           {selectedFixtureIds.size > 0 && (
             <span className="stage-plan-selection-badge">
               已选 {selectedFixtureIds.size} 台灯具
             </span>
+          )}
+          {onImportClick && (
+            <button className="stage-plan-import-btn" onClick={onImportClick}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              导入数据
+            </button>
           )}
           <div className="stage-plan-chips">
             <button

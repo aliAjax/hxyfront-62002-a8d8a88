@@ -7,6 +7,7 @@ import { CueEditDrawer } from "./components/CueEditDrawer";
 import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
 import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
+import { ImportPreview } from "./components/ImportPreview";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
@@ -54,6 +55,7 @@ function App() {
   const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
+  const [importOpen, setImportOpen] = useState(false);
   const transitionLockRef = useRef<number>(0);
 
   const selectedCue = cues.find((c) => c.id === selectedCueId) ?? null;
@@ -149,6 +151,14 @@ function App() {
     setCues(newCues);
   }, []);
 
+  const handleImportFixtures = useCallback((mergedFixtures: LightFixture[], _importedFixtures: LightFixture[]) => {
+    setFixtures(mergedFixtures);
+  }, []);
+
+  const handleImportCues = useCallback((mergedCues: Cue[], _importedCues: Cue[]) => {
+    setCues(mergedCues);
+  }, []);
+
   return (
     <main className="app">
       <section className="hero">
@@ -179,6 +189,7 @@ function App() {
         fixtures={fixtures}
         selectedFixtureIds={selectedFixtureIds}
         onToggleFixtureSelection={handleToggleFixtureSelection}
+        onImportClick={() => setImportOpen(true)}
       />
 
       {cueViewMode === "list" ? (
@@ -217,6 +228,15 @@ function App() {
         fixtures={fixtures}
         onClose={handleCloseDrawer}
         onSave={handleSaveCue}
+      />
+
+      <ImportPreview
+        open={importOpen}
+        existingFixtures={fixtures}
+        existingCues={cues}
+        onClose={() => setImportOpen(false)}
+        onImportFixtures={handleImportFixtures}
+        onImportCues={handleImportCues}
       />
     </main>
   );

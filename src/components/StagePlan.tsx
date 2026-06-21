@@ -10,9 +10,10 @@ interface Props {
   fixtures: LightFixture[];
   selectedFixtureIds: Set<string>;
   onToggleFixtureSelection: (id: string) => void;
+  onImportClick?: () => void;
 }
 
-export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelection }: Props) {
+export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelection, onImportClick }: Props) {
   const [detailFixture, setDetailFixture] = useState<LightFixture | null>(null);
   const [filter, setFilter] = useState<LightType | null>(null);
 
@@ -42,6 +43,16 @@ export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelecti
           <h2>舞台平面灯位图</h2>
         </div>
         <div className="stage-plan-header-right">
+          {onImportClick && (
+            <button className="import-launcher" onClick={onImportClick}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              导入数据
+            </button>
+          )}
           {selectedFixtureIds.size > 0 && (
             <span className="stage-plan-selection-badge">
               已选 {selectedFixtureIds.size} 台灯具

@@ -607,9 +607,6 @@ export function CollaborationConflictSimulator({
 
   const renderEditorPanel = (side: "left" | "right") => {
     const editor = side === "left" ? session.leftEditor : session.rightEditor;
-    const [selectedFixtureIds, setSelectedFixtureIds] = useState<Set<string>>(new Set());
-    const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
-    const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("list");
 
     return (
       <div className={`collab-editor-panel ${side}`}>

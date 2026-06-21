@@ -351,6 +351,33 @@ function App() {
     setFixtures(result.fixtures);
     setCues(result.cues);
     setVersionNotes(result.versionNotes);
+
+    setSelectedFixtureIds((prev) => {
+      const validIds = new Set(result.fixtures.map((f) => f.id));
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (validIds.has(id)) next.add(id);
+      }
+      return next;
+    });
+
+    setSelectedCueId((prev) => {
+      if (!prev) return null;
+      const exists = result.cues.some((c) => c.id === prev);
+      return exists ? prev : null;
+    });
+
+    setEditingCue((prev) => {
+      if (!prev) return null;
+      const exists = result.cues.some((c) => c.id === prev.id);
+      if (!exists) {
+        setDrawerOpen(false);
+        return null;
+      }
+      const updated = result.cues.find((c) => c.id === prev.id);
+      return updated ?? prev;
+    });
+
     setCollabOpen(false);
   }, []);
 

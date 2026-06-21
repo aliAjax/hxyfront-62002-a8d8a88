@@ -238,7 +238,36 @@ export function detectDataType(headers: string[]): ImportDataType {
     if (h === "fixtures" && cueScore > 0) cueScore++;
   }
 
-  if (fixtureScore > 0 && cueScore > 0) return "mixed";
+  if (fixtureScore > 0 && cueScore > 0) {
+    const hasCueSpecificField = lowerHeaders.some(
+      (h) =>
+        h.includes("cue") ||
+        h.includes("场景") ||
+        h.includes("触发") ||
+        h.includes("版本") ||
+        h.includes("亮度变化") ||
+        h.includes("scene") ||
+        h.includes("trigger") ||
+        h.includes("version") ||
+        h.includes("brightness change")
+    );
+    const hasFixtureSpecificField = lowerHeaders.some(
+      (h) =>
+        h.includes("通道") ||
+        h.includes("灯区") ||
+        h.includes("色片") ||
+        h.includes("焦点") ||
+        h === "channel" ||
+        h === "ch" ||
+        h === "type" ||
+        h.includes("light type") ||
+        h.includes("gel") ||
+        h.includes("focus")
+    );
+
+    if (hasCueSpecificField && !hasFixtureSpecificField) return "cues";
+    return "mixed";
+  }
   if (fixtureScore > 0) return "fixtures";
   if (cueScore > 0) return "cues";
   return "unknown";
@@ -674,7 +703,7 @@ export function analyzeImportData(
     if (dataType === "cues" || dataType === "mixed" || dataType === "unknown") {
       const parsed = parseCueRow(row, headers, fieldMappings, rowNumber);
       const hasCueData = parsed.data.number || parsed.data.sceneName || parsed.data.fixtures || parsed.data.triggerNote || parsed.data.versionNote;
-      if (hasCueData && parsed.errors.some(e => e.type !== "info" || !e.message.includes("空行"))) {
+      if (hasCueData) {
         cueRows.push(parsed);
         allErrors.push(...parsed.errors);
       }

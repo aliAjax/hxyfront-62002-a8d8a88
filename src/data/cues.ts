@@ -1,5 +1,7 @@
 import { FIXTURES, type LightFixture, type LightType } from "./fixtures";
 
+export type { LightFixture };
+
 export interface Cue {
   id: string;
   number: string;
@@ -231,6 +233,14 @@ export interface FieldDiff {
   fixtureNumber?: string;
 }
 
+export interface FixtureDiff {
+  fixtureId: string;
+  fixtureNumber: string;
+  brightnessDiff?: { old: number | null; new: number | null };
+  colorDiff?: { old: string; new: string };
+  focusDiff?: { old: string; new: string };
+}
+
 export interface CueVersionDiff {
   cueId: string;
   cueNumber: string;
@@ -244,13 +254,7 @@ export interface CueVersionDiff {
   };
   isRenamed?: boolean;
   matchedByContent?: boolean;
-  fixtureDiffs?: {
-    fixtureId: string;
-    fixtureNumber: string;
-    brightnessDiff?: { old: number | null; new: number | null };
-    colorDiff?: { old: string; new: string };
-    focusDiff?: { old: string; new: string };
-  }[];
+  fixtureDiffs?: FixtureDiff[];
 }
 
 export interface VersionSnapshot {
@@ -399,8 +403,8 @@ function getFixtureDiffs(
   targetCue: Cue,
   baseFixtures: LightFixture[],
   targetFixtures: LightFixture[]
-): NonNullable<CueVersionDiff["fixtureDiffs"]> {
-  const diffs: NonNullable<CueVersionDiff["fixtureDiffs"]> = [];
+): FixtureDiff[] {
+  const diffs: FixtureDiff[] = [];
 
   const baseCueFixtures = parseCueFixtures(baseCue, baseFixtures);
   const targetCueFixtures = parseCueFixtures(targetCue, targetFixtures);
@@ -419,7 +423,7 @@ function getFixtureDiffs(
 
     if (!baseF || !targetF) continue;
 
-    const fixtureDiff: CueVersionDiff["fixtureDiffs"][number] = {
+    const fixtureDiff: FixtureDiff = {
       fixtureId,
       fixtureNumber: baseF.number,
     };
@@ -599,8 +603,8 @@ export function compareVersions(
     summary: {
       totalAdded: diffs.filter((d) => d.diffType === "added").length,
       totalRemoved: diffs.filter((d) => d.diffType === "removed").length,
-      totalModified: diffs.filter((d) => d.diffType === "modified").length,
-      totalOrderChanged: diffs.filter((d) => d.diffType === "orderChanged").length,
+      totalModified: diffs.filter((d) => d.diffType === "modified" && !d.orderChanged).length,
+      totalOrderChanged: diffs.filter((d) => d.orderChanged !== undefined).length,
       fixturesAffected: Array.from(fixturesAffected),
     },
   };

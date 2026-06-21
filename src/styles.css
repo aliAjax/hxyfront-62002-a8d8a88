@@ -3110,6 +3110,44 @@ textarea {
 
 .compare-panel {
   margin-bottom: 18px;
+  position: relative;
+}
+
+.compare-locate-toast {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #faf5ff, #f0f9ff);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  text-align: center;
+  animation: toastSlideIn 0.3s ease, toastFadeOut 0.5s ease 2.5s forwards;
+  pointer-events: none;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 .compare-version-selector {

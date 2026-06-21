@@ -347,12 +347,29 @@ function App() {
           }, 2000);
         }
       });
-    } else {
-      const normalizedId = cueId.replace(/-renamed$/, "");
-      const alternativeCue = cues.find((c) => c.id === normalizedId || c.number === cueId);
-      if (alternativeCue) {
-        setSelectedCueId(alternativeCue.id);
-      }
+      return;
+    }
+
+    const normalizedId = cueId.replace(/-renamed$/, "");
+    const alternativeCue = cues.find((c) => c.id === normalizedId || c.number === cueId);
+    if (alternativeCue) {
+      setSelectedCueId(alternativeCue.id);
+      const cueElements = document.querySelectorAll(".cue-item, .timeline-cue-wrapper");
+      cueElements.forEach((el) => {
+        if (el.getAttribute("data-cue-id") === alternativeCue.id) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("cue-locate-highlight");
+          setTimeout(() => {
+            el.classList.remove("cue-locate-highlight");
+          }, 2000);
+        }
+      });
+      return;
+    }
+
+    const cueListSection = document.querySelector(".cue-list-module, .cue-timeline-module");
+    if (cueListSection) {
+      cueListSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [cues]);
 

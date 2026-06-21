@@ -89,6 +89,7 @@ export function CueVersionCompare({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newSnapshotName, setNewSnapshotName] = useState("");
   const [newSnapshotDesc, setNewSnapshotDesc] = useState("");
+  const [locateToast, setLocateToast] = useState<string | null>(null);
 
   const compareResult = useMemo<CompareResult | null>(() => {
     if (!baseVersionId || !targetVersionId) return null;
@@ -108,6 +109,7 @@ export function CueVersionCompare({
   const filteredDiffs = useMemo(() => {
     if (!compareResult) return [];
     if (diffFilter === "all") return compareResult.diffs;
+    if (diffFilter === "orderChanged") return compareResult.diffs.filter((d) => d.orderChanged !== undefined);
     return compareResult.diffs.filter((d) => d.diffType === diffFilter);
   }, [compareResult, diffFilter]);
 
@@ -120,6 +122,9 @@ export function CueVersionCompare({
     };
     for (const diff of filteredDiffs) {
       groups[diff.diffType].push(diff);
+      if (diff.orderChanged !== undefined && diff.diffType !== "orderChanged") {
+        groups.orderChanged.push(diff);
+      }
     }
     return groups;
   }, [filteredDiffs]);
@@ -148,13 +153,40 @@ export function CueVersionCompare({
     setNewSnapshotDesc("");
   }, [newSnapshotName, newSnapshotDesc, currentCues, currentFixtures, snapshots]);
 
+  const showLocateToast = useCallback((msg: string) => {
+    setLocateToast(msg);
+    setTimeout(() => setLocateToast(null), 3000);
+  }, []);
+
   const handleDiffClick = useCallback(
     (diff: CueVersionDiff) => {
       setExpandedDiffId((prev) => (prev === diff.cueId ? null : diff.cueId));
 
-      const cueId = diff.targetCue?.id || diff.baseCue?.id;
+      const targetCueId = diff.targetCue?.id;
+      const baseCueId = diff.baseCue?.id;
+      const cueId = targetCueId || baseCueId;
+
       if (cueId) {
-        onLocateCue(cueId);
+        const existsInCurrent = currentCues.some((c) => c.id === cueId);
+        if (existsInCurrent) {
+          onLocateCue(cueId);
+        } else if (targetCueId) {
+          const matchByNumber = currentCues.find((c) => c.number === diff.targetCue!.number);
+          if (matchByNumber) {
+            onLocateCue(matchByNumber.id);
+            showLocateToast(`Cue ${diff.cueNumber} 已定位到当前版本中编号相同的Cue`);
+          } else {
+            showLocateToast(`Cue ${diff.cueNumber} 仅存在于历史版本中，当前版本未找到对应Cue`);
+          }
+        } else if (diff.diffType === "removed") {
+          const matchByNumber = currentCues.find((c) => c.number === diff.baseCue!.number);
+          if (matchByNumber) {
+            onLocateCue(matchByNumber.id);
+            showLocateToast(`已删除的Cue ${diff.cueNumber}，定位到当前版本中编号相同的Cue`);
+          } else {
+            showLocateToast(`Cue ${diff.cueNumber} 已从当前版本中删除`);
+          }
+        }
       }
 
       const fixtureIds: string[] = [];
@@ -174,7 +206,7 @@ export function CueVersionCompare({
         onLocateFixtures(Array.from(new Set(fixtureIds)));
       }
     },
-    [onLocateCue, onLocateFixtures, currentFixtures]
+    [onLocateCue, onLocateFixtures, currentFixtures, currentCues, showLocateToast]
   );
 
   const handleFixtureClick = useCallback(
@@ -400,8 +432,30 @@ export function CueVersionCompare({
                 className="compare-locate-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const cueId = diff.targetCue?.id || diff.baseCue?.id;
-                  if (cueId) onLocateCue(cueId);
+                  const targetCueId = diff.targetCue?.id;
+                  const baseCueId = diff.baseCue?.id;
+                  const cueId = targetCueId || baseCueId;
+                  if (!cueId) return;
+                  const existsInCurrent = currentCues.some((c) => c.id === cueId);
+                  if (existsInCurrent) {
+                    onLocateCue(cueId);
+                  } else if (targetCueId) {
+                    const matchByNumber = currentCues.find((c) => c.number === diff.targetCue!.number);
+                    if (matchByNumber) {
+                      onLocateCue(matchByNumber.id);
+                      showLocateToast(`Cue ${diff.cueNumber} 已定位到当前版本中编号相同的Cue`);
+                    } else {
+                      showLocateToast(`Cue ${diff.cueNumber} 仅存在于历史版本中，当前版本未找到对应Cue`);
+                    }
+                  } else if (diff.diffType === "removed") {
+                    const matchByNumber = currentCues.find((c) => c.number === diff.baseCue!.number);
+                    if (matchByNumber) {
+                      onLocateCue(matchByNumber.id);
+                      showLocateToast(`已删除的Cue ${diff.cueNumber}，定位到当前版本中编号相同的Cue`);
+                    } else {
+                      showLocateToast(`Cue ${diff.cueNumber} 已从当前版本中删除`);
+                    }
+                  }
                 }}
               >
                 定位到Cue详情
@@ -427,6 +481,8 @@ export function CueVersionCompare({
                   }
                   if (fixtureIds.length > 0) {
                     onLocateFixtures(Array.from(new Set(fixtureIds)));
+                  } else {
+                    showLocateToast(`未找到关联灯具，无法定位到灯位图`);
                   }
                 }}
               >
@@ -441,6 +497,11 @@ export function CueVersionCompare({
 
   return (
     <section className="panel compare-panel">
+      {locateToast && (
+        <div className="compare-locate-toast" role="status" aria-live="polite">
+          {locateToast}
+        </div>
+      )}
       <div className="heading">
         <div>
           <p>版本管理</p>

@@ -3,8 +3,10 @@ import "./styles.css";
 import { StagePlan } from "./components/StagePlan";
 import { CueList } from "./components/CueList";
 import { CueEditDrawer } from "./components/CueEditDrawer";
+import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { FIXTURES } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
+import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
 
 const project = {
   "sourceNo": 2,
@@ -44,12 +46,13 @@ function App() {
   const [cues, setCues] = useState<Cue[]>(INITIAL_CUES);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
+  const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
 
   const metricValues = [
     FIXTURES.length,
     cues.length,
     cues.length > 0 ? cues[cues.length - 1].number : "无",
-    FIXTURES.filter((f) => f.notes.includes("确认")).length,
+    versionNotes.filter((n) => !n.confirmed).length,
   ];
 
   const handleAddCue = () => {
@@ -101,6 +104,8 @@ function App() {
       <StagePlan />
 
       <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} />
+
+      <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 
       <CueEditDrawer
         open={drawerOpen}

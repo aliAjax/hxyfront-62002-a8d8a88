@@ -478,6 +478,7 @@ export function CueTimeline({
                   )}
                   <div
                     key={cue.id}
+                    data-cue-id={cue.id}
                     ref={(el) => {
                       cueWrappersRef.current[index] = el;
                     }}

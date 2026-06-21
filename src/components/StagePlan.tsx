@@ -130,6 +130,7 @@ export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelecti
               return (
                 <g
                   key={fixture.id}
+                  data-fixture-id={fixture.id}
                   className={`fixture-group${isSelected ? " fixture-selected" : ""}`}
                   onClick={(e) => handleFixtureClick(fixture, e)}
                   onContextMenu={(e) => handleFixtureRightClick(fixture, e)}

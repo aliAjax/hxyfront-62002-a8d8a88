@@ -67,6 +67,7 @@ export function CueList({
             return (
               <article
                 key={cue.id}
+                data-cue-id={cue.id}
                 className={`cue-item${isSelected ? " cue-item-selected" : ""}${diverged ? " cue-item-diverged" : ""}`}
                 onClick={() => onSelect(cue.id)}
               >

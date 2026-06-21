@@ -208,3 +208,449 @@ export function syncCueBrightnessFromFixtures(
     brightnessChange: `亮度${avg}%`,
   };
 }
+
+export type DiffType = "added" | "removed" | "modified" | "orderChanged";
+
+export type FieldChangeType =
+  | "number"
+  | "sceneName"
+  | "fixtures"
+  | "brightnessChange"
+  | "triggerNote"
+  | "versionNote"
+  | "order"
+  | "fixtureBrightness"
+  | "fixtureColor"
+  | "fixtureFocus";
+
+export interface FieldDiff {
+  field: FieldChangeType;
+  oldValue: string | number | null;
+  newValue: string | number | null;
+  fixtureId?: string;
+  fixtureNumber?: string;
+}
+
+export interface CueVersionDiff {
+  cueId: string;
+  cueNumber: string;
+  diffType: DiffType;
+  baseCue?: Cue;
+  targetCue?: Cue;
+  fieldDiffs: FieldDiff[];
+  orderChanged?: {
+    oldIndex: number;
+    newIndex: number;
+  };
+  isRenamed?: boolean;
+  matchedByContent?: boolean;
+  fixtureDiffs?: {
+    fixtureId: string;
+    fixtureNumber: string;
+    brightnessDiff?: { old: number | null; new: number | null };
+    colorDiff?: { old: string; new: string };
+    focusDiff?: { old: string; new: string };
+  }[];
+}
+
+export interface VersionSnapshot {
+  id: string;
+  name: string;
+  createdAt: string;
+  description: string;
+  cues: Cue[];
+  fixtures: LightFixture[];
+  dataVersion: number;
+}
+
+export interface CompareResult {
+  baseVersion: VersionSnapshot;
+  targetVersion: VersionSnapshot;
+  diffs: CueVersionDiff[];
+  summary: {
+    totalAdded: number;
+    totalRemoved: number;
+    totalModified: number;
+    totalOrderChanged: number;
+    fixturesAffected: string[];
+  };
+}
+
+const COMPARE_FIELDS: (keyof Cue)[] = [
+  "number",
+  "sceneName",
+  "fixtures",
+  "brightnessChange",
+  "triggerNote",
+  "versionNote",
+];
+
+function getFieldLabel(field: keyof Cue): FieldChangeType {
+  const labels: Record<keyof Cue, FieldChangeType> = {
+    id: "number",
+    number: "number",
+    sceneName: "sceneName",
+    fixtures: "fixtures",
+    brightnessChange: "brightnessChange",
+    triggerNote: "triggerNote",
+    versionNote: "versionNote",
+  };
+  return labels[field] || field;
+}
+
+function calculateContentSimilarity(a: Cue, b: Cue): number {
+  let score = 0;
+  let total = 0;
+
+  if (a.sceneName && b.sceneName) {
+    total++;
+    if (a.sceneName === b.sceneName) score++;
+    else if (
+      a.sceneName.includes(b.sceneName) ||
+      b.sceneName.includes(a.sceneName)
+    )
+      score += 0.5;
+  }
+
+  if (a.fixtures && b.fixtures) {
+    total++;
+    if (a.fixtures === b.fixtures) score++;
+    else {
+      const aFixtures = parseCueFixtures(a).map((f) => f.id);
+      const bFixtures = parseCueFixtures(b).map((f) => f.id);
+      const intersection = aFixtures.filter((id) => bFixtures.includes(id));
+      if (aFixtures.length > 0 || bFixtures.length > 0) {
+        const union = new Set([...aFixtures, ...bFixtures]);
+        score += intersection.length / union.size;
+      }
+      total++;
+    }
+  }
+
+  if (a.triggerNote && b.triggerNote) {
+    total++;
+    if (a.triggerNote === b.triggerNote) score++;
+    else if (
+      a.triggerNote.includes(b.triggerNote) ||
+      b.triggerNote.includes(a.triggerNote)
+    )
+      score += 0.5;
+  }
+
+  return total > 0 ? score / total : 0;
+}
+
+function matchCuesByContent(
+  baseCues: Cue[],
+  targetCues: Cue[],
+  baseMatched: Set<string>,
+  targetMatched: Set<string>
+): Array<{ base: Cue; target: Cue; similarity: number }> {
+  const matches: Array<{ base: Cue; target: Cue; similarity: number }> = [];
+  const SIMILARITY_THRESHOLD = 0.6;
+
+  for (const baseCue of baseCues) {
+    if (baseMatched.has(baseCue.id)) continue;
+
+    let bestMatch: Cue | null = null;
+    let bestScore = 0;
+
+    for (const targetCue of targetCues) {
+      if (targetMatched.has(targetCue.id)) continue;
+
+      const similarity = calculateContentSimilarity(baseCue, targetCue);
+      if (similarity >= SIMILARITY_THRESHOLD && similarity > bestScore) {
+        bestMatch = targetCue;
+        bestScore = similarity;
+      }
+    }
+
+    if (bestMatch) {
+      matches.push({ base: baseCue, target: bestMatch, similarity: bestScore });
+      baseMatched.add(baseCue.id);
+      targetMatched.add(bestMatch.id);
+    }
+  }
+
+  return matches;
+}
+
+function getCueFieldDiffs(baseCue: Cue, targetCue: Cue): FieldDiff[] {
+  const diffs: FieldDiff[] = [];
+
+  for (const field of COMPARE_FIELDS) {
+    const oldVal = baseCue[field] ?? "";
+    const newVal = targetCue[field] ?? "";
+
+    if (oldVal !== newVal) {
+      diffs.push({
+        field: getFieldLabel(field),
+        oldValue: oldVal || null,
+        newValue: newVal || null,
+      });
+    }
+  }
+
+  return diffs;
+}
+
+function getFixtureDiffs(
+  baseCue: Cue,
+  targetCue: Cue,
+  baseFixtures: LightFixture[],
+  targetFixtures: LightFixture[]
+): NonNullable<CueVersionDiff["fixtureDiffs"]> {
+  const diffs: NonNullable<CueVersionDiff["fixtureDiffs"]> = [];
+
+  const baseCueFixtures = parseCueFixtures(baseCue, baseFixtures);
+  const targetCueFixtures = parseCueFixtures(targetCue, targetFixtures);
+
+  const baseFixtureMap = new Map(baseCueFixtures.map((f) => [f.id, f]));
+  const targetFixtureMap = new Map(targetCueFixtures.map((f) => [f.id, f]));
+
+  const allFixtureIds = new Set([
+    ...baseFixtureMap.keys(),
+    ...targetFixtureMap.keys(),
+  ]);
+
+  for (const fixtureId of allFixtureIds) {
+    const baseF = baseFixtureMap.get(fixtureId);
+    const targetF = targetFixtureMap.get(fixtureId);
+
+    if (!baseF || !targetF) continue;
+
+    const fixtureDiff: CueVersionDiff["fixtureDiffs"][number] = {
+      fixtureId,
+      fixtureNumber: baseF.number,
+    };
+
+    const baseBrightness = parseCueBrightness(baseCue);
+    const targetBrightness = parseCueBrightness(targetCue);
+
+    if (baseBrightness !== targetBrightness) {
+      fixtureDiff.brightnessDiff = {
+        old: baseBrightness,
+        new: targetBrightness,
+      };
+    }
+
+    if (baseF.color !== targetF.color) {
+      fixtureDiff.colorDiff = { old: baseF.color, new: targetF.color };
+    }
+
+    if (baseF.focus !== targetF.focus) {
+      fixtureDiff.focusDiff = { old: baseF.focus, new: targetF.focus };
+    }
+
+    if (
+      fixtureDiff.brightnessDiff ||
+      fixtureDiff.colorDiff ||
+      fixtureDiff.focusDiff
+    ) {
+      diffs.push(fixtureDiff);
+    }
+  }
+
+  return diffs;
+}
+
+export function compareVersions(
+  baseVersion: VersionSnapshot,
+  targetVersion: VersionSnapshot
+): CompareResult {
+  const diffs: CueVersionDiff[] = [];
+  const baseCues = baseVersion.cues;
+  const targetCues = targetVersion.cues;
+  const baseFixtures = baseVersion.fixtures;
+  const targetFixtures = targetVersion.fixtures;
+
+  const baseMatched = new Set<string>();
+  const targetMatched = new Set<string>();
+
+  for (let i = 0; i < baseCues.length; i++) {
+    const baseCue = baseCues[i];
+    const targetCue = targetCues.find((c) => c.id === baseCue.id);
+
+    if (targetCue) {
+      baseMatched.add(baseCue.id);
+      targetMatched.add(targetCue.id);
+
+      const fieldDiffs = getCueFieldDiffs(baseCue, targetCue);
+      const fixtureDiffs = getFixtureDiffs(
+        baseCue,
+        targetCue,
+        baseFixtures,
+        targetFixtures
+      );
+
+      const baseIndex = i;
+      const targetIndex = targetCues.findIndex((c) => c.id === baseCue.id);
+      const orderChanged = baseIndex !== targetIndex;
+
+      const isRenamed =
+        fieldDiffs.some((d) => d.field === "number" || d.field === "sceneName") &&
+        fieldDiffs.length <= 2;
+
+      if (fieldDiffs.length > 0 || fixtureDiffs.length > 0 || orderChanged) {
+        diffs.push({
+          cueId: baseCue.id,
+          cueNumber: targetCue.number || baseCue.number,
+          diffType: orderChanged && fieldDiffs.length === 0 ? "orderChanged" : "modified",
+          baseCue,
+          targetCue,
+          fieldDiffs,
+          fixtureDiffs,
+          orderChanged: orderChanged
+            ? { oldIndex: baseIndex, newIndex: targetIndex }
+            : undefined,
+          isRenamed,
+        });
+      }
+    }
+  }
+
+  const contentMatches = matchCuesByContent(
+    baseCues,
+    targetCues,
+    baseMatched,
+    targetMatched
+  );
+
+  for (const match of contentMatches) {
+    const fieldDiffs = getCueFieldDiffs(match.base, match.target);
+    const fixtureDiffs = getFixtureDiffs(
+      match.base,
+      match.target,
+      baseFixtures,
+      targetFixtures
+    );
+
+    const baseIndex = baseCues.findIndex((c) => c.id === match.base.id);
+    const targetIndex = targetCues.findIndex((c) => c.id === match.target.id);
+    const orderChanged = baseIndex !== targetIndex;
+
+    diffs.push({
+      cueId: match.target.id,
+      cueNumber: match.target.number,
+      diffType: "modified",
+      baseCue: match.base,
+      targetCue: match.target,
+      fieldDiffs,
+      fixtureDiffs,
+      orderChanged: orderChanged
+        ? { oldIndex: baseIndex, newIndex: targetIndex }
+        : undefined,
+      isRenamed: true,
+      matchedByContent: true,
+    });
+  }
+
+  for (const baseCue of baseCues) {
+    if (!baseMatched.has(baseCue.id)) {
+      diffs.push({
+        cueId: baseCue.id,
+        cueNumber: baseCue.number,
+        diffType: "removed",
+        baseCue,
+        fieldDiffs: [],
+      });
+    }
+  }
+
+  for (const targetCue of targetCues) {
+    if (!targetMatched.has(targetCue.id)) {
+      diffs.push({
+        cueId: targetCue.id,
+        cueNumber: targetCue.number,
+        diffType: "added",
+        targetCue,
+        fieldDiffs: [],
+      });
+    }
+  }
+
+  const fixturesAffected = new Set<string>();
+  for (const diff of diffs) {
+    if (diff.fixtureDiffs) {
+      for (const fd of diff.fixtureDiffs) {
+        fixturesAffected.add(fd.fixtureId);
+      }
+    }
+    if (diff.targetCue) {
+      const targetFixtureIds = parseCueFixtures(
+        diff.targetCue,
+        targetFixtures
+      ).map((f) => f.id);
+      targetFixtureIds.forEach((id) => fixturesAffected.add(id));
+    }
+    if (diff.baseCue) {
+      const baseFixtureIds = parseCueFixtures(
+        diff.baseCue,
+        baseFixtures
+      ).map((f) => f.id);
+      baseFixtureIds.forEach((id) => fixturesAffected.add(id));
+    }
+  }
+
+  return {
+    baseVersion,
+    targetVersion,
+    diffs,
+    summary: {
+      totalAdded: diffs.filter((d) => d.diffType === "added").length,
+      totalRemoved: diffs.filter((d) => d.diffType === "removed").length,
+      totalModified: diffs.filter((d) => d.diffType === "modified").length,
+      totalOrderChanged: diffs.filter((d) => d.diffType === "orderChanged").length,
+      fixturesAffected: Array.from(fixturesAffected),
+    },
+  };
+}
+
+export function createVersionSnapshot(
+  name: string,
+  description: string,
+  cues: Cue[],
+  fixtures: LightFixture[]
+): VersionSnapshot {
+  return {
+    id: `snapshot-${Date.now()}`,
+    name,
+    description,
+    createdAt: new Date().toISOString(),
+    cues: JSON.parse(JSON.stringify(cues)),
+    fixtures: JSON.parse(JSON.stringify(fixtures)),
+    dataVersion: 1,
+  };
+}
+
+export function normalizeCueData(cue: any): Cue {
+  const normalized: Cue = {
+    id: cue.id || `cue-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    number: cue.number || cue.cueNumber || "",
+    sceneName: cue.sceneName || cue.scene || "",
+    fixtures: cue.fixtures || cue.fixtureIds || "",
+    brightnessChange: cue.brightnessChange || cue.brightness || "",
+    triggerNote: cue.triggerNote || cue.trigger || "",
+    versionNote: cue.versionNote || cue.version || "",
+  };
+
+  if (typeof cue.brightness === "number") {
+    normalized.brightnessChange = `亮度${cue.brightness}%`;
+  }
+
+  return normalized;
+}
+
+export function normalizeVersionSnapshot(snapshot: any): VersionSnapshot {
+  return {
+    id: snapshot.id || `snapshot-${Date.now()}`,
+    name: snapshot.name || snapshot.versionName || "未命名版本",
+    createdAt: snapshot.createdAt || snapshot.timestamp || new Date().toISOString(),
+    description: snapshot.description || snapshot.notes || "",
+    cues: Array.isArray(snapshot.cues)
+      ? snapshot.cues.map(normalizeCueData)
+      : [],
+    fixtures: Array.isArray(snapshot.fixtures) ? snapshot.fixtures : FIXTURES,
+    dataVersion: snapshot.dataVersion || 1,
+  };
+}

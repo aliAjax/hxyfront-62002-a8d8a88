@@ -8,6 +8,7 @@ import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
 import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
 import { DataImportPreview } from "./components/DataImportPreview";
+import { CueVersionCompare } from "./components/CueVersionCompare";
 import { DraftBanner, type DraftBannerMode } from "./components/DraftBanner";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
@@ -332,6 +333,55 @@ function App() {
     setImportOpen(false);
   }, []);
 
+  const handleLocateCue = useCallback((cueId: string) => {
+    const cue = cues.find((c) => c.id === cueId);
+    if (cue) {
+      setSelectedCueId(cueId);
+      const cueElements = document.querySelectorAll(".cue-item, .timeline-cue-wrapper");
+      cueElements.forEach((el) => {
+        if (el.getAttribute("data-cue-id") === cueId) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("cue-locate-highlight");
+          setTimeout(() => {
+            el.classList.remove("cue-locate-highlight");
+          }, 2000);
+        }
+      });
+    } else {
+      const normalizedId = cueId.replace(/-renamed$/, "");
+      const alternativeCue = cues.find((c) => c.id === normalizedId || c.number === cueId);
+      if (alternativeCue) {
+        setSelectedCueId(alternativeCue.id);
+      }
+    }
+  }, [cues]);
+
+  const handleLocateFixtures = useCallback((fixtureIds: string[]) => {
+    if (fixtureIds.length === 0) return;
+
+    const idsSet = new Set(fixtureIds);
+    setSelectedFixtureIds(idsSet);
+
+    const stagePlan = document.querySelector(".stage-plan-module");
+    if (stagePlan) {
+      stagePlan.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    setTimeout(() => {
+      fixtureIds.forEach((id) => {
+        const fixtureEl = document.querySelector(
+          `[data-fixture-id="${id}"]`
+        );
+        if (fixtureEl) {
+          fixtureEl.classList.add("fixture-locate-highlight");
+          setTimeout(() => {
+            fixtureEl.classList.remove("fixture-locate-highlight");
+          }, 2000);
+        }
+      });
+    }, 300);
+  }, []);
+
   const effectiveBannerMode: DraftBannerMode = savedFlash
     ? "saved"
     : draftBannerMode;
@@ -407,6 +457,13 @@ function App() {
       )}
 
       <ScenePreview cue={selectedCue} fixtures={fixtures} onSyncCue={handleSyncCue} />
+
+      <CueVersionCompare
+        currentCues={cues}
+        currentFixtures={fixtures}
+        onLocateCue={handleLocateCue}
+        onLocateFixtures={handleLocateFixtures}
+      />
 
       <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 

@@ -11,6 +11,7 @@ interface FixtureState {
   brightness: number;
   color: string;
   focus: string;
+  notes: string;
   type: LightType;
   active: boolean;
   brightnessMissing: boolean;
@@ -68,6 +69,7 @@ export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
         brightness: f.brightness,
         color: f.color,
         focus: f.focus,
+        notes: f.notes,
         type: f.type,
         active: activeIds.has(f.id),
         brightnessMissing: brightnessInvalid,
@@ -326,6 +328,11 @@ export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
                             </svg>
                             {fs.focus}
                           </span>
+                          {fs.notes && (
+                            <span className="scene-preview-meta-item scene-preview-note">
+                              备注：{fs.notes}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

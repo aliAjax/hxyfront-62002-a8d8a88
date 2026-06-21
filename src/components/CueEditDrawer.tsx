@@ -309,6 +309,9 @@ export function CueEditDrawer({ open, cue, allCues, fixtures, onClose, onSave }:
                               </span>
                             )}
                             <span className="drawer-fixture-focus">{f.focus}</span>
+                            {f.notes && (
+                              <span className="drawer-fixture-note">备注：{f.notes}</span>
+                            )}
                           </div>
                         );
                       })}

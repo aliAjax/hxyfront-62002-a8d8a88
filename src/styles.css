@@ -1228,6 +1228,12 @@ textarea {
   transition: transform 0.3s ease;
 }
 
+.scene-preview-note {
+  padding-top: 2px;
+  color: #475569;
+  font-size: 11px;
+}
+
 .scene-preview-transition-indicator {
   display: flex;
   align-items: center;
@@ -2106,7 +2112,8 @@ textarea {
 }
 
 .drawer-fixture-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(48px, auto) minmax(42px, auto) minmax(32px, auto) auto 1fr;
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
@@ -2155,11 +2162,20 @@ textarea {
 .drawer-fixture-focus {
   color: #64748b;
   font-size: 11px;
-  margin-left: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
+  min-width: 0;
+}
+
+.drawer-fixture-note {
+  grid-column: 1 / -1;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .drawer-no-match-hint {
@@ -2171,4 +2187,3 @@ textarea {
   border-radius: 6px;
   border: 1px dashed var(--border);
 }
-

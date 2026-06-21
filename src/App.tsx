@@ -1,6 +1,10 @@
+import { useState } from "react";
 import "./styles.css";
 import { StagePlan } from "./components/StagePlan";
+import { CueList } from "./components/CueList";
+import { CueEditDrawer } from "./components/CueEditDrawer";
 import { FIXTURES } from "./data/fixtures";
+import { INITIAL_CUES, type Cue } from "./data/cues";
 
 const project = {
   "sourceNo": 2,
@@ -34,36 +38,49 @@ const project = {
     "焦点位置",
     "亮度预设"
   ],
-  "records": [
-    [
-      "Cue 12",
-      "冷蓝侧光",
-      "CH 021-028，亮度65%",
-      "二幕开场"
-    ],
-    [
-      "Cue 18",
-      "追光入场",
-      "FOH-03，焦点门口",
-      "需演员走位确认"
-    ],
-    [
-      "Cue 24",
-      "暖色谢幕",
-      "全台面光80%",
-      "版本B"
-    ]
-  ]
 };
 
-const metricValues = [
-  FIXTURES.length,
-  14,
-  "Cue 12",
-  FIXTURES.filter((f) => f.notes.includes("确认")).length,
-];
-
 function App() {
+  const [cues, setCues] = useState<Cue[]>(INITIAL_CUES);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingCue, setEditingCue] = useState<Cue | null>(null);
+
+  const metricValues = [
+    FIXTURES.length,
+    cues.length,
+    cues.length > 0 ? cues[cues.length - 1].number : "无",
+    FIXTURES.filter((f) => f.notes.includes("确认")).length,
+  ];
+
+  const handleAddCue = () => {
+    setEditingCue(null);
+    setDrawerOpen(true);
+  };
+
+  const handleEditCue = (cue: Cue) => {
+    setEditingCue(cue);
+    setDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+    setEditingCue(null);
+  };
+
+  const handleSaveCue = (cue: Cue) => {
+    setCues((prev) => {
+      const existingIndex = prev.findIndex((c) => c.id === cue.id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = cue;
+        return updated;
+      } else {
+        return [...prev, cue];
+      }
+    });
+    handleCloseDrawer();
+  };
+
   return (
     <main className="app">
       <section className="hero">
@@ -76,33 +93,22 @@ function App() {
         {project.metrics.map((metric: string, index: number) => (
           <article key={metric}>
             <small>{metric}</small>
-            <strong>{metricValues[index] ?? 12}</strong>
+            <strong>{metricValues[index]}</strong>
           </article>
         ))}
       </section>
 
       <StagePlan />
 
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>历史记录</p>
-            <h2>近期工作台</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} />
+
+      <CueEditDrawer
+        open={drawerOpen}
+        cue={editingCue}
+        allCues={cues}
+        onClose={handleCloseDrawer}
+        onSave={handleSaveCue}
+      />
     </main>
   );
 }

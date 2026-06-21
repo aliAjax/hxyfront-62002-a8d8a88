@@ -10,6 +10,7 @@ import { FixtureBatchWorkspace } from "./components/FixtureBatchWorkspace";
 import { DataImportPreview } from "./components/DataImportPreview";
 import { CueVersionCompare } from "./components/CueVersionCompare";
 import { DraftBanner, type DraftBannerMode } from "./components/DraftBanner";
+import { CollaborationConflictSimulator } from "./components/CollaborationConflictSimulator";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
 import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
@@ -93,6 +94,7 @@ function App() {
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
   const [importOpen, setImportOpen] = useState(false);
+  const [collabOpen, setCollabOpen] = useState(false);
   const transitionLockRef = useRef<number>(0);
 
   const [draftBannerMode, setDraftBannerMode] = useState<DraftBannerMode>(() => {
@@ -333,6 +335,25 @@ function App() {
     setImportOpen(false);
   }, []);
 
+  const handleCollabOpen = useCallback(() => {
+    setCollabOpen(true);
+  }, []);
+
+  const handleCollabClose = useCallback(() => {
+    setCollabOpen(false);
+  }, []);
+
+  const handleCollabMergeComplete = useCallback((result: {
+    fixtures: LightFixture[];
+    cues: Cue[];
+    versionNotes: VersionNote[];
+  }) => {
+    setFixtures(result.fixtures);
+    setCues(result.cues);
+    setVersionNotes(result.versionNotes);
+    setCollabOpen(false);
+  }, []);
+
   const handleLocateCue = useCallback((cueId: string) => {
     const cue = cues.find((c) => c.id === cueId);
     if (cue) {
@@ -430,6 +451,18 @@ function App() {
             <strong>{metricValues[index]}</strong>
           </article>
         ))}
+        <article className="metrics-collab-entry" onClick={handleCollabOpen} title="排练协同冲突模拟">
+          <small>协同模拟</small>
+          <strong>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            多人协同
+          </strong>
+        </article>
       </section>
 
       <FixtureBatchWorkspace
@@ -522,6 +555,16 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {collabOpen && (
+        <CollaborationConflictSimulator
+          baseFixtures={fixtures}
+          baseCues={cues}
+          baseVersionNotes={versionNotes}
+          onMergeComplete={handleCollabMergeComplete}
+          onClose={handleCollabClose}
+        />
       )}
     </main>
   );

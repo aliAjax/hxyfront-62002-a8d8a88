@@ -603,7 +603,7 @@ export function compareVersions(
     summary: {
       totalAdded: diffs.filter((d) => d.diffType === "added").length,
       totalRemoved: diffs.filter((d) => d.diffType === "removed").length,
-      totalModified: diffs.filter((d) => d.diffType === "modified" && !d.orderChanged).length,
+      totalModified: diffs.filter((d) => d.diffType === "modified").length,
       totalOrderChanged: diffs.filter((d) => d.orderChanged !== undefined).length,
       fixturesAffected: Array.from(fixturesAffected),
     },

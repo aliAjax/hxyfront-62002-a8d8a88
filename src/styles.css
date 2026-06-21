@@ -208,6 +208,251 @@ input {
   line-height: 1.6;
 }
 
+.stage-plan-module {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(31, 41, 55, 0.08);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.stage-plan-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.stage-plan-label {
+  color: var(--primary);
+  font-weight: 800;
+  margin: 0;
+  font-size: 13px;
+}
+
+.stage-plan-header h2 {
+  margin: 4px 0 0;
+}
+
+.stage-plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 0 14px;
+  min-height: 34px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 17px;
+  transition: all 0.2s;
+}
+
+.chip.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.stage-plan-body {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 18px;
+}
+
+.stage-plan-canvas {
+  position: relative;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stage-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.fixture-group {
+  transition: transform 0.15s;
+}
+
+.fixture-group:hover {
+  transform: scale(1.08);
+}
+
+.stage-plan-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #64748b;
+  backdrop-filter: blur(4px);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.detail-panel {
+  background: #fbfdff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-panel-empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-empty-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.detail-empty-hint p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.detail-close {
+  width: 30px;
+  height: 30px;
+  min-height: unset;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #64748b;
+  padding: 0;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 22px;
+}
+
+.detail-channel {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-brightness {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brightness-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.brightness-label strong {
+  font-size: 15px;
+}
+
+.brightness-bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.brightness-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.detail-fields {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-field dt {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-field dd {
+  margin: 0;
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
 @media (max-width: 860px) {
   .metrics,
   .workspace,
@@ -218,5 +463,35 @@ input {
   .hero {
     min-height: 210px;
     padding: 24px;
+  }
+
+  .stage-plan-body {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-panel {
+    padding: 16px;
+  }
+
+  .stage-plan-header {
+    flex-direction: column;
+  }
+
+  .stage-plan-legend {
+    font-size: 11px;
+    gap: 8px;
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stage-plan-chips {
+    gap: 6px;
+  }
+
+  .chip {
+    padding: 0 10px;
+    min-height: 30px;
+    font-size: 12px;
   }
 }

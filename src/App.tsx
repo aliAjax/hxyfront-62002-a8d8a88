@@ -1,4 +1,6 @@
 import "./styles.css";
+import { StagePlan } from "./components/StagePlan";
+import { FIXTURES } from "./data/fixtures";
 
 const project = {
   "sourceNo": 2,
@@ -54,6 +56,13 @@ const project = {
   ]
 };
 
+const metricValues = [
+  FIXTURES.length,
+  14,
+  "Cue 12",
+  FIXTURES.filter((f) => f.notes.includes("确认")).length,
+];
+
 function App() {
   return (
     <main className="app">
@@ -67,39 +76,12 @@ function App() {
         {project.metrics.map((metric: string, index: number) => (
           <article key={metric}>
             <small>{metric}</small>
-            <strong>{[86, 14, 7, 32][index] ?? 12}</strong>
+            <strong>{metricValues[index] ?? 12}</strong>
           </article>
         ))}
       </section>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存草稿</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
+      <StagePlan />
 
       <section className="panel">
         <div className="heading">

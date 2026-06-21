@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
-import { type Cue, EMPTY_CUE } from "../data/cues";
+import { useState, useEffect, useMemo } from "react";
+import { type Cue, EMPTY_CUE, parseCueFixtures, parseCueBrightness, hasBrightnessField, getCueFixtureDiffs, syncCueBrightnessFromFixtures } from "../data/cues";
+import { LIGHT_TYPE_COLORS, type LightFixture, type LightType } from "../data/fixtures";
+
+const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
 
 interface Props {
   open: boolean;
   cue: Cue | null;
   allCues: Cue[];
+  fixtures: LightFixture[];
   onClose: () => void;
   onSave: (cue: Cue) => void;
 }
@@ -16,7 +20,7 @@ interface FormErrors {
   brightnessChange?: string;
 }
 
-export function CueEditDrawer({ open, cue, allCues, onClose, onSave }: Props) {
+export function CueEditDrawer({ open, cue, allCues, fixtures, onClose, onSave }: Props) {
   const isEditing = !!cue;
   const [form, setForm] = useState<Cue>(EMPTY_CUE);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -97,6 +101,45 @@ export function CueEditDrawer({ open, cue, allCues, onClose, onSave }: Props) {
 
   const handleCancel = () => {
     onClose();
+  };
+
+  const matchedFixtures = useMemo(() => {
+    if (!form.fixtures || !form.fixtures.trim()) return [];
+    const tempCue: Cue = { ...form };
+    return parseCueFixtures(tempCue, fixtures);
+  }, [form, fixtures]);
+
+  const fixtureDiffs = useMemo(() => {
+    if (!form.fixtures || !form.fixtures.trim()) return [];
+    const tempCue: Cue = { ...form };
+    return getCueFixtureDiffs(tempCue, fixtures);
+  }, [form, fixtures]);
+
+  const cueBrightnessValue = useMemo(() => {
+    return parseCueBrightness(form);
+  }, [form]);
+
+  const hasDivergence = useMemo(() => {
+    return fixtureDiffs.some((d) => d.brightnessDiffers);
+  }, [fixtureDiffs]);
+
+  const groupedMatchedFixtures = useMemo(() => {
+    const groups: Record<LightType, LightFixture[]> = {
+      面光: [],
+      侧光: [],
+      逆光: [],
+      效果光: [],
+    };
+    for (const f of matchedFixtures) {
+      groups[f.type].push(f);
+    }
+    return groups;
+  }, [matchedFixtures]);
+
+  const handleSyncBrightness = () => {
+    const tempCue: Cue = { ...form };
+    const synced = syncCueBrightnessFromFixtures(tempCue, fixtures);
+    setForm((prev) => ({ ...prev, brightnessChange: synced.brightnessChange }));
   };
 
   if (!open) return null;
@@ -214,6 +257,73 @@ export function CueEditDrawer({ open, cue, allCues, onClose, onSave }: Props) {
               />
             </label>
           </div>
+
+          {matchedFixtures.length > 0 && (
+            <div className="form-group">
+              <div className="drawer-fixtures-preview-header">
+                <span className="drawer-fixtures-preview-title">关联灯具实时状态</span>
+                <span className="drawer-fixtures-preview-count">{matchedFixtures.length}台</span>
+                {hasDivergence && (
+                  <button
+                    className="drawer-sync-btn"
+                    onClick={handleSyncBrightness}
+                  >
+                    同步灯具当前亮度
+                  </button>
+                )}
+              </div>
+              {hasDivergence && (
+                <div className="drawer-divergence-hint">
+                  部分灯具当前亮度与Cue指令「{form.brightnessChange}」不一致
+                </div>
+              )}
+              <div className="drawer-fixtures-preview-list">
+                {ALL_TYPES.map((type) => {
+                  const group = groupedMatchedFixtures[type];
+                  if (group.length === 0) return null;
+                  const typeColor = LIGHT_TYPE_COLORS[type];
+                  return (
+                    <div key={type} className="drawer-fixtures-group">
+                      <div className="drawer-fixtures-group-header">
+                        <span className="drawer-fixtures-group-dot" style={{ background: typeColor }} />
+                        <span className="drawer-fixtures-group-label">{type}</span>
+                      </div>
+                      {group.map((f) => {
+                        const diff = fixtureDiffs.find((d) => d.fixtureId === f.id);
+                        return (
+                          <div
+                            key={f.id}
+                            className={`drawer-fixture-row${diff?.brightnessDiffers ? " drawer-fixture-row-diverged" : ""}`}
+                          >
+                            <span className="drawer-fixture-number">{f.number}</span>
+                            <span className="drawer-fixture-channel">{f.channel}</span>
+                            <span
+                              className="drawer-fixture-brightness"
+                              style={{ color: f.brightness === 0 ? "#94a3b8" : typeColor }}
+                            >
+                              {f.brightness}%
+                            </span>
+                            {diff?.brightnessDiffers && cueBrightnessValue !== null && (
+                              <span className="drawer-fixture-delta">
+                                Cue {cueBrightnessValue}%→{f.brightness}%
+                              </span>
+                            )}
+                            <span className="drawer-fixture-focus">{f.focus}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {form.fixtures && form.fixtures.trim() && matchedFixtures.length === 0 && (
+            <div className="drawer-no-match-hint">
+              未匹配到灯具，请检查关联灯具描述
+            </div>
+          )}
         </div>
 
         <div className="drawer-footer">

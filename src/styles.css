@@ -1945,3 +1945,230 @@ textarea {
   }
 }
 
+.scene-preview-divergence-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--secondary) 8%, #fff);
+  border: 1px solid color-mix(in srgb, var(--secondary) 30%, var(--border));
+  border-left: 3px solid var(--secondary);
+}
+
+.scene-preview-divergence-bar svg {
+  flex-shrink: 0;
+}
+
+.scene-preview-divergence-text {
+  flex: 1;
+  font-size: 12px;
+  color: #78716c;
+  line-height: 1.5;
+}
+
+.scene-preview-sync-btn {
+  padding: 0 12px;
+  min-height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.scene-preview-sync-btn:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+
+.scene-preview-fixture-diverged {
+  border-color: color-mix(in srgb, var(--secondary) 50%, var(--border)) !important;
+  background: color-mix(in srgb, var(--secondary) 4%, #fff) !important;
+}
+
+.scene-preview-fixture-badge-diverged {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.cue-item-diverged {
+  border-left: 3px solid var(--secondary);
+}
+
+.cue-diverged-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--secondary) 12%, #ffffff);
+  color: var(--secondary);
+  border: 1px solid color-mix(in srgb, var(--secondary) 30%, var(--border));
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.drawer-fixtures-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.drawer-fixtures-preview-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.drawer-fixtures-preview-count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.drawer-sync-btn {
+  margin-left: auto;
+  padding: 0 10px;
+  min-height: 28px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.drawer-sync-btn:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+
+.drawer-divergence-hint {
+  font-size: 11px;
+  color: var(--secondary);
+  font-weight: 600;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--secondary) 6%, #fff);
+  border-radius: 4px;
+  border-left: 3px solid var(--secondary);
+}
+
+.drawer-fixtures-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.drawer-fixtures-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drawer-fixtures-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-fixtures-group-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.drawer-fixtures-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.drawer-fixture-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.drawer-fixture-row:hover {
+  background: color-mix(in srgb, var(--primary) 4%, #fff);
+}
+
+.drawer-fixture-row-diverged {
+  background: color-mix(in srgb, var(--secondary) 6%, #fff);
+  border-left: 2px solid var(--secondary);
+}
+
+.drawer-fixture-number {
+  font-weight: 700;
+  color: #172033;
+  min-width: 48px;
+}
+
+.drawer-fixture-channel {
+  color: #94a3b8;
+  font-weight: 600;
+  min-width: 42px;
+}
+
+.drawer-fixture-brightness {
+  font-weight: 700;
+  min-width: 32px;
+  text-align: right;
+}
+
+.drawer-fixture-delta {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--secondary);
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid #fcd34d;
+}
+
+.drawer-fixture-focus {
+  color: #64748b;
+  font-size: 11px;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.drawer-no-match-hint {
+  padding: 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+}
+

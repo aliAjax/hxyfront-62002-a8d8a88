@@ -131,6 +131,18 @@ function App() {
     setSelectedCueId(cueId);
   }, []);
 
+  const handleSyncCue = useCallback((syncedCue: Cue) => {
+    setCues((prev) => {
+      const idx = prev.findIndex((c) => c.id === syncedCue.id);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = syncedCue;
+        return updated;
+      }
+      return prev;
+    });
+  }, []);
+
   return (
     <main className="app">
       <section className="hero">
@@ -163,9 +175,9 @@ function App() {
         onToggleFixtureSelection={handleToggleFixtureSelection}
       />
 
-      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} selectedCueId={selectedCueId} onSelect={handleSelectCue} />
+      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} selectedCueId={selectedCueId} onSelect={handleSelectCue} fixtures={fixtures} />
 
-      <ScenePreview cue={selectedCue} fixtures={fixtures} />
+      <ScenePreview cue={selectedCue} fixtures={fixtures} onSyncCue={handleSyncCue} />
 
       <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 
@@ -173,6 +185,7 @@ function App() {
         open={drawerOpen}
         cue={editingCue}
         allCues={cues}
+        fixtures={fixtures}
         onClose={handleCloseDrawer}
         onSave={handleSaveCue}
       />

@@ -1,4 +1,5 @@
-import { type Cue } from "../data/cues";
+import { type Cue, hasCueFixtureDivergence } from "../data/cues";
+import { type LightFixture } from "../data/fixtures";
 
 interface Props {
   cues: Cue[];
@@ -6,9 +7,10 @@ interface Props {
   onEdit: (cue: Cue) => void;
   selectedCueId: string | null;
   onSelect: (cueId: string) => void;
+  fixtures: LightFixture[];
 }
 
-export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props) {
+export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect, fixtures }: Props) {
   return (
     <section className="panel cue-list-panel">
       <div className="heading">
@@ -28,10 +30,11 @@ export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props)
         ) : (
           cues.map((cue, index) => {
             const isSelected = cue.id === selectedCueId;
+            const diverged = hasCueFixtureDivergence(cue, fixtures);
             return (
               <article
                 key={cue.id}
-                className={`cue-item${isSelected ? " cue-item-selected" : ""}`}
+                className={`cue-item${isSelected ? " cue-item-selected" : ""}${diverged ? " cue-item-diverged" : ""}`}
                 onClick={() => onSelect(cue.id)}
               >
                 <b className="cue-index">{String(index + 1).padStart(2, "0")}</b>
@@ -39,6 +42,9 @@ export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props)
                   <div className="cue-main">
                     <h3>{cue.number}</h3>
                     <span className="cue-scene">{cue.sceneName}</span>
+                    {diverged && (
+                      <span className="cue-diverged-badge">灯具已修改</span>
+                    )}
                   </div>
                   <div className="cue-detail">
                     <span className="cue-fixtures">灯具: {cue.fixtures}</span>

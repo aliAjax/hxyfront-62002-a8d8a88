@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { type Cue, parseCueFixtures, parseCueBrightness, hasBrightnessField } from "../data/cues";
+import { type Cue, parseCueFixtures, parseCueBrightness, hasBrightnessField, getCueFixtureDiffs, hasCueFixtureDivergence, syncCueBrightnessFromFixtures } from "../data/cues";
 import { LIGHT_TYPE_COLORS, type LightType, type LightFixture } from "../data/fixtures";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
@@ -14,6 +14,8 @@ interface FixtureState {
   type: LightType;
   active: boolean;
   brightnessMissing: boolean;
+  cueBrightness: number | null;
+  brightnessDiffers: boolean;
 }
 
 function colorToSwatch(colorText: string): string {
@@ -34,9 +36,10 @@ function focusToAngle(focus: string): number {
 interface Props {
   cue: Cue | null;
   fixtures: LightFixture[];
+  onSyncCue?: (cue: Cue) => void;
 }
 
-export function ScenePreview({ cue, fixtures }: Props) {
+export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
   const [animatedBrightness, setAnimatedBrightness] = useState<Record<string, number>>({});
   const [transitioning, setTransitioning] = useState(false);
   const currentBrightnessRef = useRef<Record<string, number>>({});
@@ -53,19 +56,31 @@ export function ScenePreview({ cue, fixtures }: Props) {
     if (!cue) return [];
 
     const activeIds = new Set(cueFixtures.map((f) => f.id));
+    const diffs = getCueFixtureDiffs(cue, fixtures);
+    const diffMap = new Map(diffs.map((d) => [d.fixtureId, d]));
 
-    return cueFixtures.map((f) => ({
-      id: f.id,
-      number: f.number,
-      channel: f.channel,
-      brightness: cueBrightness ?? f.brightness,
-      color: f.color,
-      focus: f.focus,
-      type: f.type,
-      active: activeIds.has(f.id),
-      brightnessMissing: brightnessInvalid,
-    }));
-  }, [cue, cueFixtures, cueBrightness, brightnessInvalid]);
+    return cueFixtures.map((f) => {
+      const diff = diffMap.get(f.id);
+      return {
+        id: f.id,
+        number: f.number,
+        channel: f.channel,
+        brightness: f.brightness,
+        color: f.color,
+        focus: f.focus,
+        type: f.type,
+        active: activeIds.has(f.id),
+        brightnessMissing: brightnessInvalid,
+        cueBrightness: diff?.cueBrightness ?? null,
+        brightnessDiffers: diff?.brightnessDiffers ?? false,
+      };
+    });
+  }, [cue, cueFixtures, brightnessInvalid, fixtures]);
+
+  const hasDivergence = useMemo(() => {
+    if (!cue) return false;
+    return hasCueFixtureDivergence(cue, fixtures);
+  }, [cue, fixtures]);
 
   const groupedFixtures = useMemo(() => {
     const groups: Record<LightType, FixtureState[]> = {
@@ -213,6 +228,27 @@ export function ScenePreview({ cue, fixtures }: Props) {
         </div>
       )}
 
+      {hasDivergence && cue && (
+        <div className="scene-preview-divergence-bar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L1 21h22L12 2z" stroke="#f59e0b" strokeWidth="2" fill="none" />
+            <line x1="12" y1="9" x2="12" y2="14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="17" r="1" fill="#f59e0b" />
+          </svg>
+          <span className="scene-preview-divergence-text">
+            灯具当前亮度与Cue指令「{cue.brightnessChange}」不一致，显示的是灯具实际值
+          </span>
+          {onSyncCue && (
+            <button
+              className="scene-preview-sync-btn"
+              onClick={() => onSyncCue(syncCueBrightnessFromFixtures(cue, fixtures))}
+            >
+              同步灯具亮度到Cue
+            </button>
+          )}
+        </div>
+      )}
+
       {fixtureStates.length > 0 && (
         <div className="scene-preview-zones">
           {ALL_TYPES.map((type) => {
@@ -234,10 +270,15 @@ export function ScenePreview({ cue, fixtures }: Props) {
                     const isDimmed = displayBrightness === 0 || fs.brightnessMissing;
 
                     return (
-                      <div key={fs.id} className={`scene-preview-fixture${fs.brightnessMissing ? " scene-preview-fixture-missing" : ""}`}>
+                      <div key={fs.id} className={`scene-preview-fixture${fs.brightnessMissing ? " scene-preview-fixture-missing" : ""}${fs.brightnessDiffers ? " scene-preview-fixture-diverged" : ""}`}>
                         <div className="scene-preview-fixture-header">
                           <span className="scene-preview-fixture-number">{fs.number}</span>
                           <span className="scene-preview-fixture-channel">{fs.channel}</span>
+                          {fs.brightnessDiffers && (
+                            <span className="scene-preview-fixture-badge scene-preview-fixture-badge-diverged">
+                              Cue{fs.cueBrightness}%→{fs.brightness}%
+                            </span>
+                          )}
                           {fs.brightnessMissing && (
                             <span className="scene-preview-fixture-badge scene-preview-fixture-badge-error">解析失败</span>
                           )}

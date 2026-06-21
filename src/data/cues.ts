@@ -145,3 +145,66 @@ export function hasBrightnessField(cue: Cue): boolean {
   if (!cue || !cue.brightnessChange) return false;
   return cue.brightnessChange.trim().length > 0;
 }
+
+export interface CueFixtureDiff {
+  fixtureId: string;
+  fixtureNumber: string;
+  cueBrightness: number | null;
+  actualBrightness: number;
+  cueFocus: string | null;
+  actualFocus: string;
+  brightnessDiffers: boolean;
+  focusDiffers: boolean;
+}
+
+export function getCueFixtureDiffs(
+  cue: Cue,
+  allFixtures: LightFixture[] = FIXTURES
+): CueFixtureDiff[] {
+  const cueFixtures = parseCueFixtures(cue, allFixtures);
+  const cueBrightness = parseCueBrightness(cue);
+  const hasCueBrightness = hasBrightnessField(cue);
+
+  return cueFixtures.map((f) => {
+    const effectiveCueBrightness = hasCueBrightness ? cueBrightness : null;
+    const brightnessDiffers = effectiveCueBrightness !== null && effectiveCueBrightness !== f.brightness;
+    const focusDiffers = hasCueBrightness && cueBrightness !== null
+      ? false
+      : false;
+
+    return {
+      fixtureId: f.id,
+      fixtureNumber: f.number,
+      cueBrightness: effectiveCueBrightness,
+      actualBrightness: f.brightness,
+      cueFocus: null,
+      actualFocus: f.focus,
+      brightnessDiffers,
+      focusDiffers,
+    };
+  });
+}
+
+export function hasCueFixtureDivergence(
+  cue: Cue,
+  allFixtures: LightFixture[] = FIXTURES
+): boolean {
+  const diffs = getCueFixtureDiffs(cue, allFixtures);
+  return diffs.some((d) => d.brightnessDiffers || d.focusDiffers);
+}
+
+export function syncCueBrightnessFromFixtures(
+  cue: Cue,
+  allFixtures: LightFixture[] = FIXTURES
+): Cue {
+  const cueFixtures = parseCueFixtures(cue, allFixtures);
+  if (cueFixtures.length === 0) return cue;
+
+  const brightnesses = cueFixtures.map((f) => f.brightness);
+  const avg = Math.round(brightnesses.reduce((a, b) => a + b, 0) / brightnesses.length);
+
+  return {
+    ...cue,
+    brightnessChange: `亮度${avg}%`,
+  };
+}

@@ -2296,6 +2296,112 @@ textarea {
   transform: translateX(-20px);
 }
 
+.timeline-cue-wrapper.shift-left-leaving {
+  transform: translateX(20px);
+  opacity: 0.35;
+}
+
+.timeline-cue-wrapper.shift-right-leaving {
+  transform: translateX(-20px);
+  opacity: 0.35;
+}
+
+.timeline-cue-group {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.timeline-insert-indicator {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+.timeline-insert-indicator.timeline-insert-start,
+.timeline-insert-indicator.timeline-insert-end {
+  padding: 0 10px;
+}
+
+.timeline-insert-line {
+  width: 4px;
+  align-self: stretch;
+  min-height: 120px;
+  background: linear-gradient(
+    180deg,
+    var(--primary),
+    color-mix(in srgb, var(--primary) 60%, var(--accent))
+  );
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent),
+    0 2px 12px rgba(124, 58, 237, 0.35);
+  animation: insert-line-pulse 1s ease-in-out infinite;
+  position: relative;
+}
+
+.timeline-insert-line::before,
+.timeline-insert-line::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.timeline-insert-line::before {
+  top: -6px;
+  border-width: 0 6px 6px 6px;
+  border-color: transparent transparent var(--primary) transparent;
+}
+
+.timeline-insert-line::after {
+  bottom: -6px;
+  border-width: 6px 6px 0 6px;
+  border-color: var(--primary) transparent transparent transparent;
+}
+
+@keyframes insert-line-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent),
+      0 2px 12px rgba(124, 58, 237, 0.35);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 12%, transparent),
+      0 2px 18px rgba(124, 58, 237, 0.5);
+  }
+}
+
+.timeline-insert-start .timeline-insert-line,
+.timeline-insert-end .timeline-insert-line {
+  width: 5px;
+  min-height: 130px;
+}
+
+.timeline-insert-label {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--primary);
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+  z-index: 5;
+}
+
 .timeline-cue {
   position: relative;
   display: flex;
@@ -2578,5 +2684,22 @@ textarea {
     left: -24px;
     width: 14px;
     height: 14px;
+  }
+
+  .timeline-insert-line {
+    min-height: 100px;
+    width: 3px;
+  }
+
+  .timeline-insert-start .timeline-insert-line,
+  .timeline-insert-end .timeline-insert-line {
+    min-height: 110px;
+    width: 4px;
+  }
+
+  .timeline-insert-label {
+    font-size: 10px;
+    padding: 2px 8px;
+    top: -20px;
   }
 }

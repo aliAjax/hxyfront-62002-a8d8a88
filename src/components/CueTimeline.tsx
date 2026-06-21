@@ -28,13 +28,15 @@ export function CueTimeline({
   onViewModeChange,
 }: Props) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [insertPosition, setInsertPosition] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragLockRef = useRef<number>(0);
   const scrollSpeedRef = useRef<number>(0);
   const scrollRAFRef = useRef<number | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const cuesContainerRef = useRef<HTMLDivElement>(null);
+  const cueWrappersRef = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -69,19 +71,40 @@ export function CueTimeline({
     };
   }, [isDragging, autoScroll]);
 
+  const updateScrollSpeed = useCallback((clientX: number) => {
+    if (!timelineRef.current) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const mouseX = clientX - rect.left;
+    const edgeThreshold = 80;
+
+    if (mouseX < edgeThreshold) {
+      scrollSpeedRef.current = -8 * (1 - mouseX / edgeThreshold);
+    } else if (mouseX > rect.width - edgeThreshold) {
+      scrollSpeedRef.current = 8 * (1 - (rect.width - mouseX) / edgeThreshold);
+    } else {
+      scrollSpeedRef.current = 0;
+    }
+  }, []);
+
   const handleDragStart = useCallback(
     (e: React.DragEvent, index: number) => {
       setDraggedIndex(index);
       setIsDragging(true);
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", String(index));
+      setInsertPosition(index);
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", String(index));
+        } catch (_) {}
+      }
     },
     []
   );
 
   const handleDragEnd = useCallback(() => {
     setDraggedIndex(null);
-    setDragOverIndex(null);
+    setInsertPosition(null);
     setIsDragging(false);
     scrollSpeedRef.current = 0;
     if (scrollRAFRef.current) {
@@ -92,7 +115,9 @@ export function CueTimeline({
   const handleDragOver = useCallback(
     (e: React.DragEvent, index: number) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "move";
+      }
 
       const now = Date.now();
       if (now - dragLockRef.current < 30) return;
@@ -100,37 +125,91 @@ export function CueTimeline({
 
       if (draggedIndex === null) return;
 
-      if (timelineRef.current) {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const edgeThreshold = 80;
+      updateScrollSpeed(e.clientX);
 
-        if (mouseX < edgeThreshold) {
-          scrollSpeedRef.current = -8 * (1 - mouseX / edgeThreshold);
-        } else if (mouseX > rect.width - edgeThreshold) {
-          scrollSpeedRef.current = 8 * (1 - (rect.width - mouseX) / edgeThreshold);
-        } else {
-          scrollSpeedRef.current = 0;
-        }
+      const wrapper = cueWrappersRef.current[index];
+      if (wrapper) {
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const relativeX = e.clientX - wrapperRect.left;
+        const isAfter = relativeX > wrapperRect.width / 2;
+        const newInsertPos = isAfter ? index + 1 : index;
+        const adjustedInsertPos =
+          draggedIndex < newInsertPos ? Math.max(0, newInsertPos - 1) : newInsertPos;
+        setInsertPosition(adjustedInsertPos);
+      } else {
+        setInsertPosition(index);
       }
-
-      if (draggedIndex === index) return;
-      setDragOverIndex(index);
     },
-    [draggedIndex]
+    [draggedIndex, updateScrollSpeed]
   );
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent, dropIndex: number) => {
+  const handleDragOverTimeline = useCallback(
+    (e: React.DragEvent) => {
       e.preventDefault();
-      if (draggedIndex === null || draggedIndex === dropIndex) {
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "move";
+      }
+
+      if (draggedIndex === null) return;
+
+      updateScrollSpeed(e.clientX);
+
+      const now = Date.now();
+      if (now - dragLockRef.current < 30) return;
+      dragLockRef.current = now;
+
+      if (!cuesContainerRef.current || cues.length === 0) {
+        setInsertPosition(0);
+        return;
+      }
+
+      const containerRect = cuesContainerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - containerRect.left;
+
+      let firstWrapperLeft = Infinity;
+      let lastWrapperRight = -Infinity;
+
+      cueWrappersRef.current.forEach((wrapper) => {
+        if (wrapper) {
+          const r = wrapper.getBoundingClientRect();
+          const left = r.left - containerRect.left;
+          const right = r.right - containerRect.left;
+          if (left < firstWrapperLeft) firstWrapperLeft = left;
+          if (right > lastWrapperRight) lastWrapperRight = right;
+        }
+      });
+
+      if (mouseX < firstWrapperLeft - 5) {
+        const adjusted = draggedIndex < 0 ? 0 : 0;
+        setInsertPosition(adjusted);
+      } else if (mouseX > lastWrapperRight + 5) {
+        setInsertPosition(cues.length - (draggedIndex !== null && draggedIndex < cues.length ? 1 : 0));
+      }
+    },
+    [draggedIndex, cues.length, updateScrollSpeed]
+  );
+
+  const performReorder = useCallback(
+    (targetInsertPos: number) => {
+      if (draggedIndex === null) {
+        handleDragEnd();
+        return;
+      }
+
+      let insertPos = targetInsertPos;
+      if (draggedIndex < insertPos) {
+        insertPos = Math.max(0, insertPos - 1);
+      }
+      insertPos = Math.max(0, Math.min(cues.length - 1, insertPos));
+
+      if (insertPos === draggedIndex) {
         handleDragEnd();
         return;
       }
 
       const newCues = [...cues];
       const [removed] = newCues.splice(draggedIndex, 1);
-      newCues.splice(dropIndex, 0, removed);
+      newCues.splice(insertPos, 0, removed);
 
       onReorder(newCues);
       handleDragEnd();
@@ -138,10 +217,89 @@ export function CueTimeline({
     [cues, draggedIndex, onReorder, handleDragEnd]
   );
 
-  const handleDragOverTimeline = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (draggedIndex === null) {
+        handleDragEnd();
+        return;
+      }
+
+      const wrapper = cueWrappersRef.current[index];
+      let finalInsertPos = index;
+      if (wrapper) {
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const relativeX = e.clientX - wrapperRect.left;
+        const isAfter = relativeX > wrapperRect.width / 2;
+        finalInsertPos = isAfter ? index + 1 : index;
+      }
+
+      performReorder(finalInsertPos);
+    },
+    [draggedIndex, performReorder, handleDragEnd]
+  );
+
+  const handleDropTimeline = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+
+      if (draggedIndex === null) {
+        handleDragEnd();
+        return;
+      }
+
+      if (!cuesContainerRef.current || cues.length === 0) {
+        handleDragEnd();
+        return;
+      }
+
+      const containerRect = cuesContainerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - containerRect.left;
+
+      let firstWrapperLeft = Infinity;
+      let lastWrapperRight = -Infinity;
+      let closestIndex = 0;
+      let closestDistance = Infinity;
+
+      cueWrappersRef.current.forEach((wrapper, idx) => {
+        if (wrapper) {
+          const r = wrapper.getBoundingClientRect();
+          const left = r.left - containerRect.left;
+          const right = r.right - containerRect.left;
+          const center = (left + right) / 2;
+          const dist = Math.abs(mouseX - center);
+          if (dist < closestDistance) {
+            closestDistance = dist;
+            closestIndex = idx;
+          }
+          if (left < firstWrapperLeft) firstWrapperLeft = left;
+          if (right > lastWrapperRight) lastWrapperRight = right;
+        }
+      });
+
+      let finalInsertPos: number;
+      if (mouseX < firstWrapperLeft - 5) {
+        finalInsertPos = 0;
+      } else if (mouseX > lastWrapperRight + 5) {
+        finalInsertPos = cues.length;
+      } else {
+        const wrapper = cueWrappersRef.current[closestIndex];
+        if (wrapper) {
+          const r = wrapper.getBoundingClientRect();
+          const relativeX = e.clientX - r.left;
+          const isAfter = relativeX > r.width / 2;
+          finalInsertPos = isAfter ? closestIndex + 1 : closestIndex;
+        } else {
+          finalInsertPos = closestIndex;
+        }
+      }
+
+      performReorder(finalInsertPos);
+    },
+    [draggedIndex, cues.length, performReorder, handleDragEnd]
+  );
 
   const moveCue = useCallback(
     (index: number, direction: "up" | "down") => {
@@ -185,6 +343,9 @@ export function CueTimeline({
     if (brightness >= 50) return "#f59e0b";
     return "#ef4444";
   };
+
+  const showStartIndicator = isDragging && insertPosition === 0;
+  const showEndIndicator = isDragging && insertPosition === cues.length;
 
   if (cues.length === 0) {
     return (
@@ -264,149 +425,190 @@ export function CueTimeline({
         ref={timelineRef}
         className={`cue-timeline${isDragging ? " is-dragging" : ""}`}
         onDragOver={handleDragOverTimeline}
+        onDrop={handleDropTimeline}
       >
         <div className="timeline-track">
           <div className="timeline-line" />
-          <div className="timeline-cues">
+          <div className="timeline-cues" ref={cuesContainerRef}>
+            {showStartIndicator && (
+              <div className="timeline-insert-indicator timeline-insert-start">
+                <div className="timeline-insert-line" />
+                <span className="timeline-insert-label">插入到开头</span>
+              </div>
+            )}
             {cues.map((cue, index) => {
               const isSelected = cue.id === selectedCueId;
               const isDraggingItem = draggedIndex === index;
-              const isDragOver = dragOverIndex === index;
+              const showBeforeIndicator =
+                isDragging &&
+                insertPosition === index &&
+                !showStartIndicator &&
+                draggedIndex !== index;
+              const showAfterIndicator =
+                isDragging &&
+                insertPosition === index + 1 &&
+                !showEndIndicator &&
+                draggedIndex !== index;
               const diverged = hasCueFixtureDivergence(cue, fixtures);
               const brightnessColor = getBrightnessColor(cue);
 
               let transformClass = "";
-              if (dragOverIndex !== null && draggedIndex !== null && draggedIndex !== dragOverIndex) {
-                if (draggedIndex < dragOverIndex) {
-                  if (index > draggedIndex && index <= dragOverIndex) {
+              if (insertPosition !== null && draggedIndex !== null && draggedIndex !== insertPosition) {
+                if (draggedIndex < insertPosition) {
+                  if (index > draggedIndex && index < insertPosition) {
                     transformClass = " shift-left";
+                  } else if (index === draggedIndex) {
+                    transformClass = " shift-left-leaving";
                   }
                 } else {
-                  if (index < draggedIndex && index >= dragOverIndex) {
+                  if (index < draggedIndex && index >= insertPosition) {
                     transformClass = " shift-right";
+                  } else if (index === draggedIndex) {
+                    transformClass = " shift-right-leaving";
                   }
                 }
               }
 
               return (
-                <div
-                  key={cue.id}
-                  className={`timeline-cue-wrapper${
-                    isDraggingItem ? " dragging" : ""
-                  }${isDragOver ? " drag-over" : ""}${transformClass}`}
-                  draggable={!isMobile}
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                >
-                  <article
-                    className={`timeline-cue${
-                      isSelected ? " timeline-cue-selected" : ""
-                    }${diverged ? " timeline-cue-diverged" : ""}`}
-                    onClick={() => onSelect(cue.id)}
-                  >
-                    <div className="timeline-cue-dot" />
-                    <div className="timeline-cue-index">
-                      {String(index + 1).padStart(2, "0")}
+                <div key={`group-${cue.id}`} className="timeline-cue-group">
+                  {showBeforeIndicator && (
+                    <div className="timeline-insert-indicator timeline-insert-before">
+                      <div className="timeline-insert-line" />
                     </div>
-                    <div className="timeline-cue-content">
-                      <div className="timeline-cue-header">
-                        <h3>{cue.number}</h3>
-                        <span className="timeline-cue-scene">{cue.sceneName}</span>
+                  )}
+                  <div
+                    key={cue.id}
+                    ref={(el) => {
+                      cueWrappersRef.current[index] = el;
+                    }}
+                    className={`timeline-cue-wrapper${
+                      isDraggingItem ? " dragging" : ""
+                    }${transformClass}`}
+                    draggable={!isMobile}
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                  >
+                    <article
+                      className={`timeline-cue${
+                        isSelected ? " timeline-cue-selected" : ""
+                      }${diverged ? " timeline-cue-diverged" : ""}`}
+                      onClick={() => onSelect(cue.id)}
+                    >
+                      <div className="timeline-cue-dot" />
+                      <div className="timeline-cue-index">
+                        {String(index + 1).padStart(2, "0")}
                       </div>
-                      <div className="timeline-cue-details">
-                        <span className="timeline-cue-fixtures">
-                          {cue.fixtures}
-                        </span>
-                        {brightnessColor && (
-                          <span
-                            className="timeline-cue-brightness"
-                            style={{ color: brightnessColor }}
-                          >
-                            {cue.brightnessChange}
+                      <div className="timeline-cue-content">
+                        <div className="timeline-cue-header">
+                          <h3>{cue.number}</h3>
+                          <span className="timeline-cue-scene">{cue.sceneName}</span>
+                        </div>
+                        <div className="timeline-cue-details">
+                          <span className="timeline-cue-fixtures">
+                            {cue.fixtures}
+                          </span>
+                          {brightnessColor && (
+                            <span
+                              className="timeline-cue-brightness"
+                              style={{ color: brightnessColor }}
+                            >
+                              {cue.brightnessChange}
+                            </span>
+                          )}
+                        </div>
+                        {cue.triggerNote && (
+                          <p className="timeline-cue-trigger">
+                            触发: {cue.triggerNote}
+                          </p>
+                        )}
+                        {diverged && (
+                          <span className="timeline-cue-diverged-badge">
+                            灯具已修改
+                          </span>
+                        )}
+                        {cue.versionNote && (
+                          <span className="timeline-cue-version">
+                            {cue.versionNote}
                           </span>
                         )}
                       </div>
-                      {cue.triggerNote && (
-                        <p className="timeline-cue-trigger">
-                          触发: {cue.triggerNote}
-                        </p>
-                      )}
-                      {diverged && (
-                        <span className="timeline-cue-diverged-badge">
-                          灯具已修改
-                        </span>
-                      )}
-                      {cue.versionNote && (
-                        <span className="timeline-cue-version">
-                          {cue.versionNote}
-                        </span>
-                      )}
-                    </div>
-                    {isMobile && (
-                      <div className="timeline-cue-mobile-actions">
-                        <div className="timeline-move-group">
-                          <button
-                            className="timeline-move-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveCueToStart(index);
-                            }}
-                            disabled={index === 0}
-                            title="移到开头"
-                          >
-                            ⏮
-                          </button>
-                          <button
-                            className="timeline-move-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveCue(index, "up");
-                            }}
-                            disabled={index === 0}
-                            title="上移"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            className="timeline-move-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveCue(index, "down");
-                            }}
-                            disabled={index === cues.length - 1}
-                            title="下移"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            className="timeline-move-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveCueToEnd(index);
-                            }}
-                            disabled={index === cues.length - 1}
-                            title="移到末尾"
-                          >
-                            ⏭
-                          </button>
+                      {isMobile && (
+                        <div className="timeline-cue-mobile-actions">
+                          <div className="timeline-move-group">
+                            <button
+                              className="timeline-move-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveCueToStart(index);
+                              }}
+                              disabled={index === 0}
+                              title="移到开头"
+                            >
+                              ⏮
+                            </button>
+                            <button
+                              className="timeline-move-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveCue(index, "up");
+                              }}
+                              disabled={index === 0}
+                              title="上移"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              className="timeline-move-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveCue(index, "down");
+                              }}
+                              disabled={index === cues.length - 1}
+                              title="下移"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              className="timeline-move-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveCueToEnd(index);
+                              }}
+                              disabled={index === cues.length - 1}
+                              title="移到末尾"
+                            >
+                              ⏭
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    <button
-                      className="timeline-cue-edit-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(cue);
-                      }}
-                    >
-                      编辑
-                    </button>
-                  </article>
+                      )}
+                      <button
+                        className="timeline-cue-edit-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(cue);
+                        }}
+                      >
+                        编辑
+                      </button>
+                    </article>
+                  </div>
+                  {showAfterIndicator && (
+                    <div className="timeline-insert-indicator timeline-insert-after">
+                      <div className="timeline-insert-line" />
+                    </div>
+                  )}
                 </div>
               );
             })}
+            {showEndIndicator && (
+              <div className="timeline-insert-indicator timeline-insert-end">
+                <div className="timeline-insert-line" />
+                <span className="timeline-insert-label">插入到末尾</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

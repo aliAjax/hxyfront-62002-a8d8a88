@@ -127,12 +127,10 @@ export function VersionNotesPanel({ notes, onChange }: Props) {
                 {note.adjustmentReason}
               </div>
 
-              {note.pendingItems && (
-                <div className="version-note-pending">
-                  <span className="version-note-field-label">待确认事项：</span>
-                  {note.pendingItems}
-                </div>
-              )}
+              <div className="version-note-pending">
+                <span className="version-note-field-label">待确认事项：</span>
+                {note.pendingItems.trim() || "暂无待确认事项"}
+              </div>
 
               <div className="version-note-actions">
                 <button

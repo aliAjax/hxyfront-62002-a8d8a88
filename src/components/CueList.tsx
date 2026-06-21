@@ -8,20 +8,53 @@ interface Props {
   selectedCueId: string | null;
   onSelect: (cueId: string) => void;
   fixtures: LightFixture[];
+  showHeader?: boolean;
+  viewMode?: "list" | "timeline";
+  onViewModeChange?: (mode: "list" | "timeline") => void;
 }
 
-export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect, fixtures }: Props) {
+export function CueList({
+  cues,
+  onAdd,
+  onEdit,
+  selectedCueId,
+  onSelect,
+  fixtures,
+  showHeader = true,
+  viewMode = "list",
+  onViewModeChange,
+}: Props) {
   return (
     <section className="panel cue-list-panel">
-      <div className="heading">
-        <div>
-          <p>Cue序列</p>
-          <h2>Cue触发顺序</h2>
+      {showHeader && (
+        <div className="heading">
+          <div>
+            <p>Cue序列</p>
+            <h2>Cue触发顺序</h2>
+          </div>
+          <div className="heading-actions">
+            {onViewModeChange && (
+              <div className="cue-view-toggle">
+                <button
+                  className={`cue-view-toggle-btn${viewMode === "list" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("list")}
+                >
+                  列表视图
+                </button>
+                <button
+                  className={`cue-view-toggle-btn${viewMode === "timeline" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("timeline")}
+                >
+                  时间线视图
+                </button>
+              </div>
+            )}
+            <button className="primary" onClick={onAdd}>
+              新增Cue
+            </button>
+          </div>
         </div>
-        <button className="primary" onClick={onAdd}>
-          新增Cue
-        </button>
-      </div>
+      )}
       <div className="cue-list">
         {cues.length === 0 ? (
           <div className="cue-empty">

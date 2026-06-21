@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import "./styles.css";
 import { StagePlan } from "./components/StagePlan";
 import { CueList } from "./components/CueList";
+import { CueTimeline } from "./components/CueTimeline";
 import { CueEditDrawer } from "./components/CueEditDrawer";
 import { VersionNotesPanel } from "./components/VersionNotesPanel";
 import { ScenePreview } from "./components/ScenePreview";
@@ -52,6 +53,7 @@ function App() {
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
   const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+  const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
   const transitionLockRef = useRef<number>(0);
 
   const selectedCue = cues.find((c) => c.id === selectedCueId) ?? null;
@@ -143,6 +145,10 @@ function App() {
     });
   }, []);
 
+  const handleReorderCues = useCallback((newCues: Cue[]) => {
+    setCues(newCues);
+  }, []);
+
   return (
     <main className="app">
       <section className="hero">
@@ -175,7 +181,30 @@ function App() {
         onToggleFixtureSelection={handleToggleFixtureSelection}
       />
 
-      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} selectedCueId={selectedCueId} onSelect={handleSelectCue} fixtures={fixtures} />
+      {cueViewMode === "list" ? (
+        <CueList
+          cues={cues}
+          onAdd={handleAddCue}
+          onEdit={handleEditCue}
+          selectedCueId={selectedCueId}
+          onSelect={handleSelectCue}
+          fixtures={fixtures}
+          viewMode={cueViewMode}
+          onViewModeChange={setCueViewMode}
+        />
+      ) : (
+        <CueTimeline
+          cues={cues}
+          onAdd={handleAddCue}
+          onEdit={handleEditCue}
+          selectedCueId={selectedCueId}
+          onSelect={handleSelectCue}
+          onReorder={handleReorderCues}
+          fixtures={fixtures}
+          viewMode={cueViewMode}
+          onViewModeChange={setCueViewMode}
+        />
+      )}
 
       <ScenePreview cue={selectedCue} fixtures={fixtures} onSyncCue={handleSyncCue} />
 

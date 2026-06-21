@@ -14,12 +14,17 @@ import { INITIAL_CUES, type Cue } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
 import {
   saveDraft,
-  loadDraft,
   loadDraftMeta,
   clearDraft,
   draftExists,
   dataDiffersFromInitial,
   exportDraftAsJson,
+  stashPendingRestoreDraft,
+  loadPendingRestoreDraft,
+  loadPendingRestoreMeta,
+  pendingRestoreDraftExists,
+  clearPendingRestoreDraft,
+  promotePendingRestoreToActive,
   type DraftData,
   type DraftMeta,
 } from "./utils/draft";
@@ -77,20 +82,40 @@ function App() {
   const transitionLockRef = useRef<number>(0);
 
   const [draftBannerMode, setDraftBannerMode] = useState<DraftBannerMode>(() => {
-    if (!draftExists()) return "none";
-    return "restore";
+    if (pendingRestoreDraftExists()) return "restore";
+    if (draftExists()) {
+      stashPendingRestoreDraft();
+      clearDraft();
+      return "restore";
+    }
+    return "none";
   });
-  const [draftMeta, setDraftMeta] = useState<DraftMeta | null>(() => loadDraftMeta());
+  const [draftMeta, setDraftMeta] = useState<DraftMeta | null>(() => {
+    const pending = loadPendingRestoreMeta();
+    return pending ?? loadDraftMeta();
+  });
   const [savedFlash, setSavedFlash] = useState(false);
+  const [editsMadeDuringRestore, setEditsMadeDuringRestore] = useState(false);
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstRenderRef = useRef(true);
 
   const getCurrentDraftData = useCallback((): DraftData => {
     return { fixtures, cues, versionNotes };
   }, [fixtures, cues, versionNotes]);
 
   useEffect(() => {
-    if (draftBannerMode === "restore") return;
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    if (draftBannerMode === "restore") {
+      const data = { fixtures, cues, versionNotes };
+      if (dataDiffersFromInitial(data, INITIAL_DRAFT_DATA)) {
+        setEditsMadeDuringRestore(true);
+      }
+    }
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
@@ -101,13 +126,15 @@ function App() {
         const ok = saveDraft(data);
         if (ok) {
           setDraftMeta(loadDraftMeta());
-          setDraftBannerMode("unsaved");
+          if (draftBannerMode !== "restore") {
+            setDraftBannerMode("unsaved");
+          }
           setSavedFlash(true);
           setTimeout(() => setSavedFlash(false), 2000);
         }
-      } else {
+      } else if (draftBannerMode !== "restore") {
         clearDraft();
-        setDraftMeta(null);
+        setDraftMeta(pendingRestoreDraftExists() ? loadPendingRestoreMeta() : null);
         setDraftBannerMode("none");
       }
     }, 800);
@@ -119,24 +146,54 @@ function App() {
   }, [fixtures, cues, versionNotes, draftBannerMode]);
 
   const handleRestoreDraft = useCallback(() => {
-    const draft = loadDraft();
+    if (editsMadeDuringRestore) {
+      setConfirmRestoreOpen(true);
+      return;
+    }
+    const draft = loadPendingRestoreDraft();
     if (draft) {
       setFixtures(draft.fixtures);
       setCues(draft.cues);
       setVersionNotes(draft.versionNotes);
+      promotePendingRestoreToActive();
+      setDraftMeta(loadDraftMeta());
     }
+    setEditsMadeDuringRestore(false);
     setDraftBannerMode("unsaved");
-    setDraftMeta(loadDraftMeta());
+  }, [editsMadeDuringRestore]);
+
+  const handleConfirmRestoreOverride = useCallback(() => {
+    const draft = loadPendingRestoreDraft();
+    if (draft) {
+      setFixtures(draft.fixtures);
+      setCues(draft.cues);
+      setVersionNotes(draft.versionNotes);
+      promotePendingRestoreToActive();
+      setDraftMeta(loadDraftMeta());
+    }
+    setEditsMadeDuringRestore(false);
+    setConfirmRestoreOpen(false);
+    setDraftBannerMode("unsaved");
+  }, []);
+
+  const handleCancelRestore = useCallback(() => {
+    setConfirmRestoreOpen(false);
   }, []);
 
   const handleDiscardDraft = useCallback(() => {
-    clearDraft();
-    setDraftMeta(null);
-    setDraftBannerMode("none");
-    setFixtures(FIXTURES);
-    setCues(INITIAL_CUES);
-    setVersionNotes(INITIAL_VERSION_NOTES);
-  }, []);
+    clearPendingRestoreDraft();
+    const data = { fixtures, cues, versionNotes };
+    const hasChanges = dataDiffersFromInitial(data, INITIAL_DRAFT_DATA);
+    if (!hasChanges) {
+      clearDraft();
+      setDraftMeta(null);
+      setDraftBannerMode("none");
+    } else {
+      setDraftMeta(loadDraftMeta());
+      setDraftBannerMode("unsaved");
+    }
+    setEditsMadeDuringRestore(false);
+  }, [fixtures, cues, versionNotes]);
 
   const handleExportDraft = useCallback(() => {
     const data = getCurrentDraftData();
@@ -264,11 +321,15 @@ function App() {
     ? "saved"
     : draftBannerMode;
 
+  const effectiveDraftMeta: DraftMeta | null = draftBannerMode === "restore"
+    ? (loadPendingRestoreMeta() ?? draftMeta)
+    : draftMeta;
+
   return (
     <main className="app">
       <DraftBanner
         mode={effectiveBannerMode}
-        draftMeta={draftMeta}
+        draftMeta={effectiveDraftMeta}
         onRestore={handleRestoreDraft}
         onDiscard={handleDiscardDraft}
         onExport={handleExportDraft}
@@ -349,6 +410,30 @@ function App() {
         onClose={handleImportClose}
         onConfirm={handleImportConfirm}
       />
+
+      {confirmRestoreOpen && (
+        <div className="draft-confirm-overlay">
+          <div className="draft-confirm-dialog">
+            <div className="draft-confirm-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <h3>当前已有未保存的修改</h3>
+            <p>恢复草稿将覆盖您刚才的编辑内容，此操作不可撤销。确定要继续吗？</p>
+            <div className="draft-confirm-actions">
+              <button className="draft-btn draft-btn-discard" onClick={handleCancelRestore}>
+                取消，保留当前编辑
+              </button>
+              <button className="draft-btn draft-btn-restore" onClick={handleConfirmRestoreOverride}>
+                确认覆盖，恢复旧草稿
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

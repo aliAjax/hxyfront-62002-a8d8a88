@@ -4,6 +4,8 @@ import { type VersionNote } from "../data/versionNotes";
 
 const DRAFT_KEY = "hxyfront-62002-draft";
 const DRAFT_META_KEY = "hxyfront-62002-draft-meta";
+const PENDING_RESTORE_DRAFT_KEY = "hxyfront-62002-pending-restore-draft";
+const PENDING_RESTORE_META_KEY = "hxyfront-62002-pending-restore-meta";
 const DRAFT_VERSION = 1;
 
 export interface DraftData {
@@ -128,3 +130,70 @@ export function exportDraftAsJson(data: DraftData, meta: DraftMeta | null): void
 }
 
 export { computeHash };
+
+export function stashPendingRestoreDraft(): boolean {
+  try {
+    const data = localStorage.getItem(DRAFT_KEY);
+    const meta = localStorage.getItem(DRAFT_META_KEY);
+    if (!data) return false;
+    localStorage.setItem(PENDING_RESTORE_DRAFT_KEY, data);
+    if (meta) localStorage.setItem(PENDING_RESTORE_META_KEY, meta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadPendingRestoreDraft(): DraftData | null {
+  try {
+    const raw = localStorage.getItem(PENDING_RESTORE_DRAFT_KEY);
+    if (!raw) return null;
+    const metaRaw = localStorage.getItem(PENDING_RESTORE_META_KEY);
+    const meta = safeJsonParse<DraftMeta | null>(metaRaw, null);
+    if (!meta || meta.version !== DRAFT_VERSION) {
+      clearPendingRestoreDraft();
+      return null;
+    }
+    return safeJsonParse<DraftData | null>(raw, null);
+  } catch {
+    return null;
+  }
+}
+
+export function loadPendingRestoreMeta(): DraftMeta | null {
+  try {
+    const raw = localStorage.getItem(PENDING_RESTORE_META_KEY);
+    return safeJsonParse<DraftMeta | null>(raw, null);
+  } catch {
+    return null;
+  }
+}
+
+export function pendingRestoreDraftExists(): boolean {
+  try {
+    return localStorage.getItem(PENDING_RESTORE_DRAFT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function clearPendingRestoreDraft(): void {
+  try {
+    localStorage.removeItem(PENDING_RESTORE_DRAFT_KEY);
+    localStorage.removeItem(PENDING_RESTORE_META_KEY);
+  } catch {}
+}
+
+export function promotePendingRestoreToActive(): boolean {
+  try {
+    const data = localStorage.getItem(PENDING_RESTORE_DRAFT_KEY);
+    const meta = localStorage.getItem(PENDING_RESTORE_META_KEY);
+    if (!data) return false;
+    localStorage.setItem(DRAFT_KEY, data);
+    if (meta) localStorage.setItem(DRAFT_META_KEY, meta);
+    clearPendingRestoreDraft();
+    return true;
+  } catch {
+    return false;
+  }
+}

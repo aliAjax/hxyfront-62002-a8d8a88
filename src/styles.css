@@ -3691,3 +3691,72 @@ textarea {
     justify-content: center;
   }
 }
+
+.draft-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.draft-confirm-dialog {
+  width: min(460px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.25s ease;
+}
+
+.draft-confirm-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--secondary) 10%, #fff);
+  color: var(--secondary);
+  margin-bottom: 14px;
+}
+
+.draft-confirm-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: #172033;
+}
+
+.draft-confirm-dialog > p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: #526071;
+  line-height: 1.6;
+}
+
+.draft-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.draft-confirm-actions .draft-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (min-width: 480px) {
+  .draft-confirm-actions {
+    flex-direction: row;
+  }
+
+  .draft-confirm-actions .draft-btn {
+    flex: 1;
+  }
+}

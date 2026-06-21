@@ -1,377 +1,293 @@
-import { useEffect, useState, useRef } from "react";
-import { FIXTURES, LIGHT_TYPE_COLORS, type LightFixture, type LightType } from "../data/fixtures";
-import { type Cue } from "../data/cues";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { type Cue, parseCueFixtures, parseCueBrightness, hasBrightnessField } from "../data/cues";
+import { LIGHT_TYPE_COLORS, type LightType } from "../data/fixtures";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
 
-interface PreviewFixture extends LightFixture {
-  cueBrightness: number | null;
-  isActiveInCue: boolean;
+interface FixtureState {
+  id: string;
+  number: string;
+  channel: string;
+  brightness: number;
+  color: string;
+  focus: string;
+  type: LightType;
+  active: boolean;
+  brightnessMissing: boolean;
 }
 
-function parseBrightness(brightnessChange: string): number | null {
-  if (!brightnessChange) return null;
-  const match = brightnessChange.match(/(\d+)/);
-  if (match) {
-    const value = parseInt(match[1], 10);
-    return Math.max(0, Math.min(100, value));
-  }
-  return null;
-}
-
-function parseFixtureIds(fixturesStr: string, allFixtures: LightFixture[]): string[] {
-  if (!fixturesStr || !fixturesStr.trim()) return [];
-
-  const trimmed = fixturesStr.trim();
-  const matchedIds: Set<string> = new Set();
-
-  if (trimmed.includes("全台") || trimmed.includes("全部") || trimmed.includes("所有")) {
-    allFixtures.forEach((f) => matchedIds.add(f.id));
-    return Array.from(matchedIds);
-  }
-
-  ALL_TYPES.forEach((type) => {
-    if (trimmed.includes(type)) {
-      allFixtures.filter((f) => f.type === type).forEach((f) => matchedIds.add(f.id));
-    }
-  });
-
-  const chRangeMatch = trimmed.match(/CH\s*(\d+)\s*[-~至到]\s*(\d+)/i);
-  if (chRangeMatch) {
-    const start = parseInt(chRangeMatch[1], 10);
-    const end = parseInt(chRangeMatch[2], 10);
-    const min = Math.min(start, end);
-    const max = Math.max(start, end);
-    allFixtures.forEach((f) => {
-      const chNumMatch = f.channel.match(/CH\s*(\d+)/i);
-      if (chNumMatch) {
-        const chNum = parseInt(chNumMatch[1], 10);
-        if (chNum >= min && chNum <= max) {
-          matchedIds.add(f.id);
-        }
-      }
-    });
-  }
-
-  const chSingleMatches = trimmed.match(/CH\s*(\d+)/gi);
-  if (chSingleMatches) {
-    chSingleMatches.forEach((ch) => {
-      const numMatch = ch.match(/(\d+)/);
-      if (numMatch) {
-        const chNum = parseInt(numMatch[1], 10);
-        allFixtures.forEach((f) => {
-          const fNumMatch = f.channel.match(/CH\s*(\d+)/i);
-          if (fNumMatch && parseInt(fNumMatch[1], 10) === chNum) {
-            matchedIds.add(f.id);
-          }
-        });
-      }
-    });
-  }
-
-  allFixtures.forEach((f) => {
-    if (trimmed.includes(f.number)) {
-      matchedIds.add(f.id);
-    }
-  });
-
-  return Array.from(matchedIds);
-}
-
-function getColorFromName(colorName: string): string {
-  if (!colorName) return "#94a3b8";
-  if (colorName.includes("冷蓝") || colorName.includes("淡蓝") || colorName.includes("原色蓝")) return "#3b82f6";
-  if (colorName.includes("曙红")) return "#ec4899";
-  if (colorName.includes("深红")) return "#dc2626";
-  if (colorName.includes("粉红")) return "#f472b6";
-  if (colorName.includes("紫色")) return "#8b5cf6";
-  if (colorName.includes("橙色")) return "#f97316";
+function colorToSwatch(colorText: string): string {
+  if (colorText.includes("蓝")) return "#3b82f6";
+  if (colorText.includes("红")) return "#ef4444";
+  if (colorText.includes("紫")) return "#8b5cf6";
+  if (colorText.includes("橙")) return "#f97316";
+  if (colorText.includes("粉")) return "#ec4899";
   return "#94a3b8";
+}
+
+function focusToAngle(focus: string): number {
+  if (focus.includes("左")) return -30;
+  if (focus.includes("右")) return 30;
+  return 0;
 }
 
 interface Props {
   cue: Cue | null;
-  allCues: Cue[];
-  onCueChange?: (cue: Cue) => void;
 }
 
-export function ScenePreview({ cue, allCues, onCueChange }: Props) {
-  const [displayFixtures, setDisplayFixtures] = useState<PreviewFixture[]>(() =>
-    FIXTURES.map((f) => ({
-      ...f,
-      cueBrightness: null,
-      isActiveInCue: false,
-    }))
-  );
-  const animationRef = useRef<number | null>(null);
-  const displayFixturesRef = useRef<PreviewFixture[]>(displayFixtures);
+export function ScenePreview({ cue }: Props) {
+  const [animatedBrightness, setAnimatedBrightness] = useState<Record<string, number>>({});
+  const [transitioning, setTransitioning] = useState(false);
+  const currentBrightnessRef = useRef<Record<string, number>>({});
+  const transitionIdRef = useRef<number>(0);
+  const rafRef = useRef<number>(0);
+  const prevCueIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    displayFixturesRef.current = displayFixtures;
-  }, [displayFixtures]);
+  const cueFixtures = useMemo(() => (cue ? parseCueFixtures(cue) : []), [cue]);
+  const cueBrightness = useMemo(() => (cue ? parseCueBrightness(cue) : null), [cue]);
+  const brightnessFieldSet = useMemo(() => (cue ? hasBrightnessField(cue) : false), [cue]);
+  const brightnessInvalid = brightnessFieldSet && cueBrightness === null;
 
-  const matchedIds = cue ? parseFixtureIds(cue.fixtures, FIXTURES) : [];
-  const cueBrightness = cue ? parseBrightness(cue.brightnessChange) : null;
-  const activeCount = matchedIds.length;
+  const fixtureStates: FixtureState[] = useMemo(() => {
+    if (!cue) return [];
 
-  useEffect(() => {
-    const target: PreviewFixture[] = FIXTURES.map((f) => ({
-      ...f,
-      cueBrightness,
-      isActiveInCue: matchedIds.includes(f.id),
+    const activeIds = new Set(cueFixtures.map((f) => f.id));
+
+    return cueFixtures.map((f) => ({
+      id: f.id,
+      number: f.number,
+      channel: f.channel,
+      brightness: cueBrightness ?? f.brightness,
+      color: f.color,
+      focus: f.focus,
+      type: f.type,
+      active: activeIds.has(f.id),
+      brightnessMissing: brightnessInvalid,
     }));
+  }, [cue, cueFixtures, cueBrightness, brightnessInvalid]);
 
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
+  const groupedFixtures = useMemo(() => {
+    const groups: Record<LightType, FixtureState[]> = {
+      面光: [],
+      侧光: [],
+      逆光: [],
+      效果光: [],
+    };
+    for (const fs of fixtureStates) {
+      groups[fs.type].push(fs);
+    }
+    return groups;
+  }, [fixtureStates]);
+
+  useEffect(() => {
+    if (fixtureStates.length === 0) {
+      setAnimatedBrightness({});
+      currentBrightnessRef.current = {};
+      prevCueIdRef.current = cue?.id ?? null;
+      return;
     }
 
-    const startFixtures = displayFixturesRef.current;
-    const duration = 600;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+
+    const cueChanged = prevCueIdRef.current !== cue?.id;
+    prevCueIdRef.current = cue?.id ?? null;
+
+    const currentId = ++transitionIdRef.current;
+    setTransitioning(true);
+
+    const startBrightness: Record<string, number> = {};
+    const endBrightness: Record<string, number> = {};
+    const newIds = new Set<string>();
+
+    for (const fs of fixtureStates) {
+      newIds.add(fs.id);
+      if (cueChanged) {
+        startBrightness[fs.id] = currentBrightnessRef.current[fs.id] ?? 0;
+      } else {
+        startBrightness[fs.id] = animatedBrightness[fs.id] ?? currentBrightnessRef.current[fs.id] ?? 0;
+      }
+      endBrightness[fs.id] = fs.brightness;
+    }
+
+    for (const id of Object.keys(currentBrightnessRef.current)) {
+      if (!newIds.has(id)) {
+        startBrightness[id] = currentBrightnessRef.current[id];
+        endBrightness[id] = 0;
+      }
+    }
+
+    const duration = 400;
     const startTime = performance.now();
 
     const animate = (now: number) => {
+      if (currentId !== transitionIdRef.current) return;
+
       const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
+      const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
 
-      const interpolated = target.map((tf, i) => {
-        const sf = startFixtures[i] || tf;
-        const startBrightness = sf?.brightness ?? 0;
-        const targetBrightness = tf.isActiveInCue
-          ? (tf.cueBrightness ?? tf.brightness)
-          : 0;
-        const interpolatedBrightness = Math.round(startBrightness + (targetBrightness - startBrightness) * eased);
+      const next: Record<string, number> = {};
+      for (const id of Object.keys(endBrightness)) {
+        next[id] = Math.round(
+          startBrightness[id] + (endBrightness[id] - startBrightness[id]) * eased
+        );
+      }
 
-        return {
-          ...tf,
-          brightness: interpolatedBrightness,
-        };
-      });
-
-      setDisplayFixtures(interpolated);
+      currentBrightnessRef.current = next;
+      setAnimatedBrightness(next);
 
       if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(animate);
+      } else {
+        setTransitioning(false);
       }
     };
 
-    setDisplayFixtures(target.map((tf, i) => ({
-      ...tf,
-      brightness: startFixtures[i]?.brightness ?? 0,
-    })));
-
-    animationRef.current = requestAnimationFrame(animate);
+    rafRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
       }
     };
-  }, [cue?.id, matchedIds.join(','), cueBrightness]);
+  }, [fixtureStates, cue?.id]);
 
-  const groupedByType: Record<LightType, PreviewFixture[]> = {
-    面光: [],
-    侧光: [],
-    逆光: [],
-    效果光: [],
-  };
-
-  displayFixtures.forEach((f) => {
-    groupedByType[f.type].push(f);
-  });
+  const noFixtures = cue && fixtureStates.length === 0;
 
   return (
-    <section className="scene-preview-module">
-      <div className="scene-preview-header">
+    <section className="scene-preview-panel">
+      <div className="heading">
         <div>
-          <p className="scene-preview-label">当前场景</p>
-          <h2 className="scene-preview-title">
-            {cue ? `${cue.number} · ${cue.sceneName}` : "请选择一个Cue"}
-          </h2>
-          {cue && (
-            <div className="scene-preview-meta">
-              <span className="scene-meta-item">
-                <strong>灯具:</strong> {cue.fixtures}
-              </span>
-              <span className="scene-meta-item">
-                <strong>亮度:</strong> {cue.brightnessChange}
-              </span>
-              {cue.triggerNote && (
-                <span className="scene-meta-item">
-                  <strong>触发:</strong> {cue.triggerNote}
-                </span>
-              )}
-            </div>
-          )}
+          <p>场景预览</p>
+          <h2>当前场景灯光状态</h2>
         </div>
-        <div className="scene-preview-summary">
-          <div className="summary-item">
-            <small>激活灯具</small>
-            <strong>{activeCount}/{FIXTURES.length}</strong>
+        {cue && (
+          <div className="scene-preview-cue-badge">
+            <span className="scene-preview-cue-number">{cue.number}</span>
+            <span className="scene-preview-cue-name">{cue.sceneName}</span>
           </div>
-        </div>
+        )}
       </div>
 
-      {!cue ? (
+      {!cue && (
         <div className="scene-preview-empty">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="32" cy="32" r="28" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="6 4" />
-            <path d="M32 20v12M32 38v3" stroke="#cbd5e1" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="32" cy="47" r="2.5" fill="#cbd5e1" />
-          </svg>
-          <p className="empty-title">暂无选中Cue</p>
-          <p className="empty-hint">点击下方Cue列表中的Cue项，查看该场景的灯光状态预览</p>
-        </div>
-      ) : activeCount === 0 ? (
-        <div className="scene-preview-empty scene-preview-warning">
           <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="28" cy="28" r="26" stroke="#f59e0b" strokeWidth="2" fill="#fef3c7" />
-            <path d="M28 16v14M28 34v3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="28" cy="42" r="2.5" fill="#f59e0b" />
+            <circle cx="28" cy="28" r="26" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="6 4" />
+            <path d="M28 18v12m0 4v4" stroke="#cbd5e1" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
-          <p className="empty-title">未匹配到关联灯具</p>
-          <p className="empty-hint">当前Cue的灯具描述 "{cue.fixtures}" 未能匹配到任何灯具。请检查灯具编号、通道号或灯区描述是否正确。</p>
+          <p className="scene-preview-empty-title">点击Cue列表项预览灯光状态</p>
+          <p className="scene-preview-empty-hint">选中任意Cue即可查看该场景的可视化灯具信息</p>
         </div>
-      ) : (
+      )}
+
+      {noFixtures && (
+        <div className="scene-preview-warning">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L1 21h22L12 2z" stroke="#f59e0b" strokeWidth="2" fill="none" />
+            <line x1="12" y1="9" x2="12" y2="14" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="17" r="1" fill="#f59e0b" />
+          </svg>
+          <div>
+            <p className="scene-preview-warning-title">未匹配到关联灯具</p>
+            <p className="scene-preview-warning-text">当前Cue的灯具描述「{cue.fixtures}」无法匹配到灯位图中的灯具，请检查Cue的关联灯具字段。</p>
+          </div>
+        </div>
+      )}
+
+      {fixtureStates.length > 0 && brightnessInvalid && (
+        <div className="scene-preview-warning scene-preview-warning-info">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="#8b5cf6" strokeWidth="2" fill="none" />
+            <line x1="12" y1="8" x2="12" y2="13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="17" r="1" fill="#8b5cf6" />
+          </svg>
+          <div>
+            <p className="scene-preview-warning-title scene-preview-warning-title-info">亮度值无法解析，已使用灯具默认亮度</p>
+            <p className="scene-preview-warning-text scene-preview-warning-text-info">Cue的亮度变化描述「{cue?.brightnessChange}」未能识别，请使用「亮度XX%」格式。</p>
+          </div>
+        </div>
+      )}
+
+      {fixtureStates.length > 0 && (
         <div className="scene-preview-zones">
           {ALL_TYPES.map((type) => {
-            const fixtures = groupedByType[type];
-            const typeActive = fixtures.filter((f) => f.isActiveInCue).length;
+            const groupFixtures = groupedFixtures[type];
+            if (groupFixtures.length === 0) return null;
             const typeColor = LIGHT_TYPE_COLORS[type];
 
             return (
-              <div key={type} className="preview-zone">
-                <div className="zone-header">
-                  <div className="zone-title-wrap">
-                    <span className="zone-color-dot" style={{ background: typeColor }} />
-                    <h3 className="zone-title">{type}</h3>
-                  </div>
-                  <span className="zone-count">
-                    {typeActive}/{fixtures.length} 激活
-                  </span>
+              <div key={type} className="scene-preview-zone">
+                <div className="scene-preview-zone-header">
+                  <span className="scene-preview-zone-dot" style={{ background: typeColor }} />
+                  <span className="scene-preview-zone-label">{type}</span>
+                  <span className="scene-preview-zone-count">{groupFixtures.length}台</span>
                 </div>
+                <div className="scene-preview-fixtures">
+                  {groupFixtures.map((fs) => {
+                    const displayBrightness = animatedBrightness[fs.id] ?? fs.brightness;
+                    const angle = focusToAngle(fs.focus);
+                    const isDimmed = displayBrightness === 0 || fs.brightnessMissing;
 
-                <div className="zone-fixtures">
-                  {fixtures.length === 0 ? (
-                    <p className="zone-empty">暂无此类型灯具</p>
-                  ) : (
-                    fixtures.map((f) => {
-                      const displayBrightness = f.isActiveInCue
-                        ? (f.cueBrightness ?? f.brightness)
-                        : 0;
-                      const isOn = displayBrightness > 0;
-                      const swatchColor = getColorFromName(f.color);
-
-                      return (
-                        <div
-                          key={f.id}
-                          className={`preview-fixture-card ${f.isActiveInCue ? "active" : "inactive"}`}
-                        >
-                          <div className="fixture-visual">
-                            <svg width="80" height="80" viewBox="0 0 80 80">
-                              <defs>
-                                <radialGradient id={`glow-${f.id}`} cx="50%" cy="50%" r="50%">
-                                  <stop offset="0%" stopColor={typeColor} stopOpacity={isOn ? 0.7 : 0} />
-                                  <stop offset="100%" stopColor={typeColor} stopOpacity="0" />
-                                </radialGradient>
-                              </defs>
-                              {isOn && (
-                                <circle cx="40" cy="40" r="36" fill={`url(#glow-${f.id})`} />
-                              )}
-                              <circle
-                                cx="40"
-                                cy="40"
-                                r={isOn ? 20 + (displayBrightness / 100) * 6 : 18}
-                                fill={isOn ? typeColor : "#e2e8f0"}
-                                opacity={isOn ? 0.9 : 0.4}
-                                style={{ transition: "all 0.3s" }}
-                              />
-                              <circle
-                                cx="40"
-                                cy="40"
-                                r={isOn ? 12 : 10}
-                                fill={isOn ? "#ffffff" : "#cbd5e1"}
-                                opacity={0.85}
-                                style={{ transition: "all 0.3s" }}
-                              />
-                              <circle
-                                cx="40"
-                                cy="40"
-                                r={isOn ? 7 : 5}
-                                fill={swatchColor}
-                                opacity={isOn ? 0.8 : 0.3}
-                                style={{ transition: "all 0.3s" }}
-                              />
-                            </svg>
-                          </div>
-
-                          <div className="fixture-info">
-                            <div className="fixture-head">
-                              <span className="fixture-number">{f.number}</span>
-                              <span className="fixture-channel">{f.channel}</span>
-                            </div>
-
-                            <div className="fixture-brightness">
-                              <div className="fixture-brightness-label">
-                                <span>亮度</span>
-                                <strong
-                                  style={{
-                                    color: isOn ? typeColor : "#94a3b8",
-                                  }}
-                                >
-                                  {displayBrightness}%
-                                </strong>
-                              </div>
-                              <div className="fixture-brightness-bar">
-                                <div
-                                  className="fixture-brightness-fill"
-                                  style={{
-                                    width: `${displayBrightness}%`,
-                                    background: isOn ? typeColor : "#e2e8f0",
-                                    transition: "width 0.3s, background 0.3s",
-                                  }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="fixture-attrs">
-                              <div className="fixture-attr">
-                                <span
-                                  className="color-swatch"
-                                  style={{
-                                    background: swatchColor,
-                                    opacity: isOn ? 1 : 0.4,
-                                  }}
-                                />
-                                <span className={f.isActiveInCue ? "" : "attr-dim"}>
-                                  {f.color}
-                                </span>
-                              </div>
-                              <div className="fixture-attr fixture-focus">
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 12 12"
-                                  fill="none"
-                                  style={{ opacity: isOn ? 1 : 0.4 }}
-                                >
-                                  <path
-                                    d="M6 1L8 5L11 5.5L8.5 8L9 11L6 9.5L3 11L3.5 8L1 5.5L4 5L6 1Z"
-                                    stroke={isOn ? "#64748b" : "#cbd5e1"}
-                                    strokeWidth="0.8"
-                                    fill="none"
-                                  />
-                                </svg>
-                                <span className={f.isActiveInCue ? "" : "attr-dim"}>
-                                  {f.focus}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
+                    return (
+                      <div key={fs.id} className={`scene-preview-fixture${fs.brightnessMissing ? " scene-preview-fixture-missing" : ""}`}>
+                        <div className="scene-preview-fixture-header">
+                          <span className="scene-preview-fixture-number">{fs.number}</span>
+                          <span className="scene-preview-fixture-channel">{fs.channel}</span>
+                          {fs.brightnessMissing && (
+                            <span className="scene-preview-fixture-badge scene-preview-fixture-badge-error">解析失败</span>
+                          )}
                         </div>
-                      );
-                    })
-                  )}
+
+                        <div className="scene-preview-brightness">
+                          <div className="scene-preview-brightness-bar">
+                            <div
+                              className="scene-preview-brightness-fill"
+                              style={{
+                                width: `${displayBrightness}%`,
+                                background: isDimmed ? "#e2e8f0" : typeColor,
+                              }}
+                            />
+                          </div>
+                          <span
+                            className="scene-preview-brightness-value"
+                            style={{
+                              color: fs.brightnessMissing ? "#7c3aed" : (isDimmed ? "#94a3b8" : typeColor),
+                            }}
+                          >
+                            {`${displayBrightness}%`}
+                          </span>
+                        </div>
+
+                        <div className="scene-preview-meta">
+                          <span className="scene-preview-meta-item">
+                            <span
+                              className="scene-preview-color-swatch"
+                              style={{ background: colorToSwatch(fs.color) }}
+                            />
+                            {fs.color}
+                          </span>
+                          <span className="scene-preview-meta-item">
+                            <svg
+                              className="scene-preview-focus-arrow"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 14 14"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                              style={{ transform: `rotate(${angle}deg)` }}
+                            >
+                              <path d="M7 2v8m0 0l-3-3m3 3l3-3" stroke={isDimmed ? "#94a3b8" : typeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            {fs.focus}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -379,35 +295,10 @@ export function ScenePreview({ cue, allCues, onCueChange }: Props) {
         </div>
       )}
 
-      {cue && allCues.length > 1 && (
-        <div className="scene-preview-nav">
-          {(() => {
-            const currentIndex = allCues.findIndex((c) => c.id === cue.id);
-            const hasPrev = currentIndex > 0;
-            const hasNext = currentIndex < allCues.length - 1;
-
-            return (
-              <>
-                <button
-                  className="nav-btn"
-                  disabled={!hasPrev}
-                  onClick={() => hasPrev && onCueChange && onCueChange(allCues[currentIndex - 1])}
-                >
-                  ← 上一Cue
-                </button>
-                <span className="nav-indicator">
-                  {currentIndex + 1} / {allCues.length}
-                </span>
-                <button
-                  className="nav-btn"
-                  disabled={!hasNext}
-                  onClick={() => hasNext && onCueChange && onCueChange(allCues[currentIndex + 1])}
-                >
-                  下一Cue →
-                </button>
-              </>
-            );
-          })()}
+      {transitioning && (
+        <div className="scene-preview-transition-indicator">
+          <span className="scene-preview-transition-dot" />
+          过渡中…
         </div>
       )}
     </section>

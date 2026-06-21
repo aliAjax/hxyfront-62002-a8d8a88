@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import "./styles.css";
 import { StagePlan } from "./components/StagePlan";
 import { CueList } from "./components/CueList";
@@ -48,12 +48,15 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
   const [versionNotes, setVersionNotes] = useState<VersionNote[]>(INITIAL_VERSION_NOTES);
-  const [selectedCue, setSelectedCue] = useState<Cue | null>(cues.length > 0 ? cues[0] : null);
+  const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+  const transitionLockRef = useRef<number>(0);
+
+  const selectedCue = cues.find((c) => c.id === selectedCueId) ?? null;
 
   const metricValues = [
     FIXTURES.length,
     cues.length,
-    selectedCue ? selectedCue.number : (cues.length > 0 ? cues[cues.length - 1].number : "无"),
+    cues.length > 0 ? cues[cues.length - 1].number : "无",
     versionNotes.filter((n) => !n.confirmed).length,
   ];
 
@@ -72,30 +75,25 @@ function App() {
     setEditingCue(null);
   };
 
-  const handleSelectCue = (cue: Cue) => {
-    setSelectedCue(cue);
-  };
-
   const handleSaveCue = (cue: Cue) => {
     setCues((prev) => {
       const existingIndex = prev.findIndex((c) => c.id === cue.id);
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex] = cue;
-        if (selectedCue?.id === cue.id) {
-          setSelectedCue(cue);
-        }
         return updated;
       } else {
-        const newCues = [...prev, cue];
-        if (!selectedCue) {
-          setSelectedCue(cue);
-        }
-        return newCues;
+        return [...prev, cue];
       }
     });
     handleCloseDrawer();
   };
+
+  const handleSelectCue = useCallback((cueId: string) => {
+    const lockId = Date.now();
+    transitionLockRef.current = lockId;
+    setSelectedCueId((prev) => (prev === cueId ? null : cueId));
+  }, []);
 
   return (
     <main className="app">
@@ -116,19 +114,9 @@ function App() {
 
       <StagePlan />
 
-      <ScenePreview
-        cue={selectedCue}
-        allCues={cues}
-        onCueChange={handleSelectCue}
-      />
+      <CueList cues={cues} onAdd={handleAddCue} onEdit={handleEditCue} selectedCueId={selectedCueId} onSelect={handleSelectCue} />
 
-      <CueList
-        cues={cues}
-        onAdd={handleAddCue}
-        onEdit={handleEditCue}
-        selectedCueId={selectedCue?.id ?? null}
-        onSelect={handleSelectCue}
-      />
+      <ScenePreview cue={selectedCue} />
 
       <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
 

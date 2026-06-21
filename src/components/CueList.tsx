@@ -4,8 +4,8 @@ interface Props {
   cues: Cue[];
   onAdd: () => void;
   onEdit: (cue: Cue) => void;
-  selectedCueId?: string | null;
-  onSelect?: (cue: Cue) => void;
+  selectedCueId: string | null;
+  onSelect: (cueId: string) => void;
 }
 
 export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props) {
@@ -27,13 +27,12 @@ export function CueList({ cues, onAdd, onEdit, selectedCueId, onSelect }: Props)
           </div>
         ) : (
           cues.map((cue, index) => {
-            const isSelected = selectedCueId === cue.id;
+            const isSelected = cue.id === selectedCueId;
             return (
               <article
                 key={cue.id}
-                className={`cue-item ${isSelected ? "cue-item-selected" : ""}`}
-                onClick={() => onSelect && onSelect(cue)}
-                style={{ cursor: onSelect ? "pointer" : "default" }}
+                className={`cue-item${isSelected ? " cue-item-selected" : ""}`}
+                onClick={() => onSelect(cue.id)}
               >
                 <b className="cue-index">{String(index + 1).padStart(2, "0")}</b>
                 <div className="cue-info">

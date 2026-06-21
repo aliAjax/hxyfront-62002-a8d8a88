@@ -92,7 +92,7 @@ function App() {
   const handleSelectCue = useCallback((cueId: string) => {
     const lockId = Date.now();
     transitionLockRef.current = lockId;
-    setSelectedCueId((prev) => (prev === cueId ? null : cueId));
+    setSelectedCueId(cueId);
   }, []);
 
   return (

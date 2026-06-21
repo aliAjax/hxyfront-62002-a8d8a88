@@ -23,6 +23,37 @@ interface Props {
 
 type TabType = "input" | "preview" | "errors" | "conflicts";
 
+function getErrorIcon(type: string) {
+  if (type === "error") return "✕";
+  if (type === "warning") return "⚠";
+  return "ℹ";
+}
+
+function getErrorColor(type: string) {
+  if (type === "error") return "#ef4444";
+  if (type === "warning") return "#f59e0b";
+  return "#06b6d4";
+}
+
+function getConflictIcon(type: string) {
+  if (type === "duplicate_number") return "🔢";
+  if (type === "duplicate_channel") return "📡";
+  if (type === "missing_fixture") return "❓";
+  if (type === "existing_number_conflict") return "⚠️";
+  if (type === "existing_channel_conflict") return "📡";
+  return "⚠";
+}
+
+function getDataTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    fixtures: "灯具数据",
+    cues: "Cue数据",
+    mixed: "混合数据",
+    unknown: "自动识别",
+  };
+  return labels[type] || type;
+}
+
 export function DataImportPreview({ open, existingFixtures, onClose, onConfirm }: Props) {
   const [csvText, setCsvText] = useState("");
   const [previewResult, setPreviewResult] = useState<ImportPreviewResult | null>(null);
@@ -75,35 +106,6 @@ export function DataImportPreview({ open, existingFixtures, onClose, onConfirm }
     setPreviewResult(null);
     setActiveTab("input");
     onClose();
-  };
-
-  const getDataTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      fixtures: "灯具数据",
-      cues: "Cue数据",
-      mixed: "混合数据",
-      unknown: "未知类型",
-    };
-    return labels[type] || type;
-  };
-
-  const getErrorIcon = (type: string) => {
-    if (type === "error") return "✕";
-    if (type === "warning") return "⚠";
-    return "ℹ";
-  };
-
-  const getErrorColor = (type: string) => {
-    if (type === "error") return "#ef4444";
-    if (type === "warning") return "#f59e0b";
-    return "#06b6d4";
-  };
-
-  const getConflictIcon = (type: string) => {
-    if (type === "duplicate_number") return "🔢";
-    if (type === "duplicate_channel") return "📡";
-    if (type === "missing_fixture") return "❓";
-    return "⚠";
   };
 
   if (!open) return null;

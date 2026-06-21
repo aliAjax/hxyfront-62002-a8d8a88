@@ -161,7 +161,13 @@ function App() {
 
   const handleImportConfirm = useCallback((data: { fixtures: LightFixture[]; cues: Cue[] }) => {
     if (data.fixtures.length > 0) {
-      setFixtures((prev) => [...prev, ...data.fixtures]);
+      setFixtures((prev) => {
+        const existingNumbers = new Set(prev.map((f) => f.number.toUpperCase()));
+        const newFixtures = data.fixtures.filter(
+          (f) => !existingNumbers.has(f.number.toUpperCase())
+        );
+        return [...prev, ...newFixtures];
+      });
     }
     if (data.cues.length > 0) {
       setCues((prev) => [...prev, ...data.cues]);

@@ -19,10 +19,11 @@ export interface ImportError {
 }
 
 export interface ImportConflict {
-  type: "duplicate_number" | "duplicate_channel" | "missing_fixture";
+  type: "duplicate_number" | "duplicate_channel" | "missing_fixture" | "existing_number_conflict" | "existing_channel_conflict";
   description: string;
   affectedRows: number[];
   suggestion: string;
+  existingItems?: string[];
 }
 
 export interface ParsedFixtureRow {
@@ -197,35 +198,44 @@ export function detectDataType(headers: string[]): ImportDataType {
   let fixtureScore = 0;
   let cueScore = 0;
 
+  const fixtureKeywords = [
+    "灯具编号", "灯号", "灯具", "通道号", "通道", "灯区类型", "灯区",
+    "色片", "颜色", "焦点位置", "焦点", "亮度预设",
+    "fixture", "channel", "light type", "color", "gel", "focus",
+  ];
+
+  const cueKeywords = [
+    "cue编号", "cue号", "cue", "场景名称", "场景",
+    "涉及灯具", "亮度变化", "触发时机", "触发", "版本备注", "版本",
+    "scene name", "scene", "trigger note", "trigger", "version note", "version",
+    "brightness change",
+  ];
+
   for (const h of lowerHeaders) {
-    if (
-      h.includes("灯具") ||
-      h.includes("灯号") ||
-      h.includes("通道") ||
-      h.includes("灯区") ||
-      h.includes("色片") ||
-      h.includes("焦点") ||
-      h === "number" ||
-      h === "channel" ||
-      h === "type" ||
-      h === "color" ||
-      h === "focus" ||
-      h === "fixture"
-    ) {
-      fixtureScore++;
+    for (const kw of fixtureKeywords) {
+      if (h.includes(kw)) {
+        fixtureScore++;
+        break;
+      }
     }
-    if (
-      h.includes("cue") ||
-      h.includes("场景") ||
-      h.includes("触发") ||
-      h.includes("版本") ||
-      h === "scenename" ||
-      h === "scene name" ||
-      h === "trigger" ||
-      h === "version"
-    ) {
-      cueScore++;
+    if (h === "number" || h === "编号") fixtureScore++;
+    if (h === "type" || h === "类型") fixtureScore++;
+    if (h === "brightness" || h === "亮度") fixtureScore++;
+    if (h === "notes" || h === "备注") fixtureScore++;
+  }
+
+  for (const h of lowerHeaders) {
+    for (const kw of cueKeywords) {
+      if (h.includes(kw)) {
+        cueScore++;
+        break;
+      }
     }
+    if (h === "scenename") cueScore += 2;
+    if (h === "triggernote") cueScore++;
+    if (h === "versionnote") cueScore++;
+    if (h === "brightnesschange") cueScore++;
+    if (h === "fixtures" && cueScore > 0) cueScore++;
   }
 
   if (fixtureScore > 0 && cueScore > 0) return "mixed";
@@ -655,15 +665,16 @@ export function analyzeImportData(
 
     if (dataType === "fixtures" || dataType === "mixed" || dataType === "unknown") {
       const parsed = parseFixtureRow(row, headers, fieldMappings, rowNumber);
-      if (parsed.data.number || parsed.data.channel) {
+      if (parsed.data.number || parsed.data.channel || parsed.data.type) {
         fixtureRows.push(parsed);
         allErrors.push(...parsed.errors);
       }
     }
 
-    if (dataType === "cues" || dataType === "mixed") {
+    if (dataType === "cues" || dataType === "mixed" || dataType === "unknown") {
       const parsed = parseCueRow(row, headers, fieldMappings, rowNumber);
-      if (parsed.data.number || parsed.data.sceneName || parsed.data.fixtures) {
+      const hasCueData = parsed.data.number || parsed.data.sceneName || parsed.data.fixtures || parsed.data.triggerNote || parsed.data.versionNote;
+      if (hasCueData && parsed.errors.some(e => e.type !== "info" || !e.message.includes("空行"))) {
         cueRows.push(parsed);
         allErrors.push(...parsed.errors);
       }
@@ -717,6 +728,62 @@ export function analyzeImportData(
         description: `通道号 "${channel}" 重复出现 ${rowNums.length} 次`,
         affectedRows: rowNums,
         suggestion: "请修改重复的通道号，确保每个通道号唯一",
+      });
+    }
+  }
+
+  if (existingFixtures.length > 0 && validFixtureRows.length > 0) {
+    const existingNumberMap = new Map<string, string>();
+    const existingChannelMap = new Map<string, string>();
+
+    existingFixtures.forEach((f) => {
+      existingNumberMap.set(f.number.toUpperCase(), f.number);
+      existingChannelMap.set(f.channel.toUpperCase(), f.channel);
+    });
+
+    const numberConflictRows: number[] = [];
+    const numberConflictValues: string[] = [];
+    const channelConflictRows: number[] = [];
+    const channelConflictValues: string[] = [];
+
+    validFixtureRows.forEach((row) => {
+      if (row.data.number) {
+        const num = row.data.number.toUpperCase();
+        if (existingNumberMap.has(num)) {
+          numberConflictRows.push(row.rowNumber);
+          if (!numberConflictValues.includes(row.data.number!)) {
+            numberConflictValues.push(row.data.number!);
+          }
+        }
+      }
+      if (row.data.channel) {
+        const ch = row.data.channel.toUpperCase();
+        if (existingChannelMap.has(ch)) {
+          channelConflictRows.push(row.rowNumber);
+          if (!channelConflictValues.includes(row.data.channel!)) {
+            channelConflictValues.push(row.data.channel!);
+          }
+        }
+      }
+    });
+
+    if (numberConflictRows.length > 0) {
+      conflicts.push({
+        type: "existing_number_conflict",
+        description: `导入数据中有 ${numberConflictValues.length} 个灯具编号与工作台现有灯具重复：${numberConflictValues.join("、")}`,
+        affectedRows: numberConflictRows,
+        suggestion: "导入后将跳过重复编号的灯具，或修改导入数据中的编号后重新导入",
+        existingItems: numberConflictValues,
+      });
+    }
+
+    if (channelConflictRows.length > 0) {
+      conflicts.push({
+        type: "existing_channel_conflict",
+        description: `导入数据中有 ${channelConflictValues.length} 个通道号与工作台现有灯具冲突：${channelConflictValues.join("、")}`,
+        affectedRows: channelConflictRows,
+        suggestion: "通道号冲突可能导致调光异常，建议检查并修正后再导入",
+        existingItems: channelConflictValues,
       });
     }
   }

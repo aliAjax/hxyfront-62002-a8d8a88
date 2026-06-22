@@ -658,3 +658,65 @@ export function normalizeVersionSnapshot(snapshot: any): VersionSnapshot {
     dataVersion: snapshot.dataVersion || 1,
   };
 }
+
+export function buildFixturesString(fixtureIds: string[], allFixtures: LightFixture[] = FIXTURES): string {
+  if (fixtureIds.length === 0) return "";
+
+  const selectedFixtures = allFixtures.filter((f) => fixtureIds.includes(f.id));
+  if (selectedFixtures.length === 0) return "";
+
+  if (selectedFixtures.length === allFixtures.length) {
+    return "全台灯具";
+  }
+
+  const selectedByType: Record<LightType, LightFixture[]> = {
+    面光: [],
+    侧光: [],
+    逆光: [],
+    效果光: [],
+  };
+  for (const f of selectedFixtures) {
+    selectedByType[f.type].push(f);
+  }
+
+  const allByType: Record<LightType, LightFixture[]> = {
+    面光: [],
+    侧光: [],
+    逆光: [],
+    效果光: [],
+  };
+  for (const f of allFixtures) {
+    allByType[f.type].push(f);
+  }
+
+  const completeTypes: LightType[] = [];
+  const partialFixtures: LightFixture[] = [];
+
+  const TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
+  for (const t of TYPES) {
+    if (selectedByType[t].length === 0) continue;
+    if (selectedByType[t].length === allByType[t].length) {
+      completeTypes.push(t);
+    } else {
+      partialFixtures.push(...selectedByType[t]);
+    }
+  }
+
+  const parts: string[] = [];
+
+  for (const t of completeTypes) {
+    parts.push(t);
+  }
+
+  if (partialFixtures.length > 0) {
+    const sorted = [...partialFixtures].sort((a, b) => {
+      const aNum = parseInt(a.number.replace(/\D/g, ""), 10) || 0;
+      const bNum = parseInt(b.number.replace(/\D/g, ""), 10) || 0;
+      if (aNum !== bNum) return aNum - bNum;
+      return a.number.localeCompare(b.number);
+    });
+    parts.push(sorted.map((f) => f.number).join("、"));
+  }
+
+  return parts.join(" + ");
+}

@@ -114,23 +114,47 @@ export function parseCueFixtures(cue: Cue, allFixtures: LightFixture[] = FIXTURE
     return [...allFixtures];
   }
 
-  for (const [keyword, lightType] of Object.entries(TYPE_KEYWORDS)) {
-    if (text.includes(keyword) || text.includes(`全台${keyword}`)) {
-      return allFixtures.filter((f) => f.type === lightType);
+  const segments = text.split(/\s*\+\s*/).map((s) => s.trim()).filter(Boolean);
+  const resultIds = new Set<string>();
+
+  for (const seg of segments) {
+    let matchedInSeg = false;
+
+    for (const [keyword, lightType] of Object.entries(TYPE_KEYWORDS)) {
+      if (seg === keyword || seg === `全台${keyword}` || seg.includes(keyword)) {
+        for (const f of allFixtures) {
+          if (f.type === lightType) {
+            resultIds.add(f.id);
+          }
+        }
+        matchedInSeg = true;
+        break;
+      }
+    }
+    if (matchedInSeg) continue;
+
+    const channels = parseChannelRange(seg);
+    if (channels.length > 0) {
+      for (const f of allFixtures) {
+        if (channels.includes(f.channel.toUpperCase())) {
+          resultIds.add(f.id);
+        }
+      }
+      matchedInSeg = true;
+    }
+    if (matchedInSeg) continue;
+
+    const fixtureNumbers = parseFixtureNumbers(seg);
+    if (fixtureNumbers.length > 0) {
+      for (const f of allFixtures) {
+        if (fixtureNumbers.includes(f.number.toUpperCase())) {
+          resultIds.add(f.id);
+        }
+      }
     }
   }
 
-  const channels = parseChannelRange(text);
-  if (channels.length > 0) {
-    return allFixtures.filter((f) => channels.includes(f.channel.toUpperCase()));
-  }
-
-  const fixtureNumbers = parseFixtureNumbers(text);
-  if (fixtureNumbers.length > 0) {
-    return allFixtures.filter((f) => fixtureNumbers.includes(f.number.toUpperCase()));
-  }
-
-  return [];
+  return allFixtures.filter((f) => resultIds.has(f.id));
 }
 
 export function parseCueBrightness(cue: Cue): number | null {

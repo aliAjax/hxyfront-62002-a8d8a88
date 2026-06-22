@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { type Cue, parseCueFixtures, parseCueBrightness, hasBrightnessField, getCueFixtureDiffs, hasCueFixtureDivergence, syncCueBrightnessFromFixtures } from "../data/cues";
+import {
+  type Cue,
+  parseCueFixtures,
+  parseCueBrightness,
+  hasBrightnessField,
+  getCueFixtureDiffs,
+  hasCueFixtureDivergence,
+  syncCueBrightnessFromFixtures,
+  compareAdjacentCues,
+  type CueComparisonResult,
+  type FixtureTransition,
+  type FixtureChangeType,
+} from "../data/cues";
 import { LIGHT_TYPE_COLORS, type LightType, type LightFixture } from "../data/fixtures";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
@@ -34,19 +46,37 @@ function focusToAngle(focus: string): number {
   return 0;
 }
 
+const CHANGE_TYPE_LABELS: Record<FixtureChangeType, { label: string; color: string; icon: string }> = {
+  turnedOn: { label: "开灯", color: "#22c55e", icon: "↑" },
+  turnedOff: { label: "关灯", color: "#64748b", icon: "↓" },
+  brightened: { label: "变亮", color: "#f97316", icon: "↗" },
+  dimmed: { label: "变暗", color: "#0ea5e9", icon: "↘" },
+  colorChanged: { label: "换色", color: "#a855f7", icon: "◐" },
+  unchanged: { label: "无变化", color: "#94a3b8", icon: "—" },
+};
+
+type ViewMode = "single" | "compare";
+
 interface Props {
   cue: Cue | null;
+  allCues: Cue[];
   fixtures: LightFixture[];
   onSyncCue?: (cue: Cue) => void;
 }
 
-export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
+export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
+  const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [animatedBrightness, setAnimatedBrightness] = useState<Record<string, number>>({});
   const [transitioning, setTransitioning] = useState(false);
   const currentBrightnessRef = useRef<Record<string, number>>({});
   const transitionIdRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
   const prevCueIdRef = useRef<string | null>(null);
+
+  const comparison = useMemo<CueComparisonResult | null>(() => {
+    if (!cue || viewMode !== "compare") return null;
+    return compareAdjacentCues(cue, allCues, fixtures);
+  }, [cue, allCues, fixtures, viewMode]);
 
   const cueFixtures = useMemo(() => (cue ? parseCueFixtures(cue, fixtures) : []), [cue, fixtures]);
   const cueBrightness = useMemo(() => (cue ? parseCueBrightness(cue) : null), [cue]);
@@ -176,17 +206,70 @@ export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
 
   const noFixtures = cue && fixtureStates.length === 0;
 
+  const renderCueBadge = (c: Cue | null, dimmed = false) => {
+    if (!c) return null;
+    return (
+      <div className={`scene-preview-cue-badge${dimmed ? " scene-preview-cue-badge-dimmed" : ""}`}>
+        <span className="scene-preview-cue-number">{c.number}</span>
+        <span className="scene-preview-cue-name">{c.sceneName}</span>
+      </div>
+    );
+  };
+
+  const filterMatchedTransitions = (transitions: FixtureTransition[]) =>
+    transitions.filter((t) => t.toState?.matched && !t.changeTypes.includes("unchanged"));
+
+  const groupTransitionsByType = (transitions: FixtureTransition[]) => {
+    const groups: Record<FixtureChangeType, FixtureTransition[]> = {
+      turnedOn: [],
+      turnedOff: [],
+      brightened: [],
+      dimmed: [],
+      colorChanged: [],
+      unchanged: [],
+    };
+    for (const t of transitions) {
+      for (const ct of t.changeTypes) {
+        if (ct !== "unchanged") {
+          groups[ct].push(t);
+        }
+      }
+    }
+    return groups;
+  };
+
+  const getPrimaryChangeType = (transition: FixtureTransition): FixtureChangeType => {
+    const priority: FixtureChangeType[] = ["colorChanged", "turnedOn", "turnedOff", "brightened", "dimmed"];
+    for (const p of priority) {
+      if (transition.changeTypes.includes(p)) return p;
+    }
+    return "unchanged";
+  };
+
   return (
     <section className="scene-preview-panel">
       <div className="heading">
         <div>
           <p>场景预览</p>
-          <h2>当前场景灯光状态</h2>
+          <h2>{viewMode === "single" ? "当前场景灯光状态" : "前后Cue对照"}</h2>
         </div>
+        {cue && viewMode === "single" && renderCueBadge(cue)}
         {cue && (
-          <div className="scene-preview-cue-badge">
-            <span className="scene-preview-cue-number">{cue.number}</span>
-            <span className="scene-preview-cue-name">{cue.sceneName}</span>
+          <div className="scene-preview-view-toggle">
+            <button
+              className={viewMode === "single" ? "chip active" : "chip"}
+              onClick={() => setViewMode("single")}
+            >
+              单Cue
+            </button>
+            <button
+              className={viewMode === "compare" ? "chip active" : "chip"}
+              onClick={() => setViewMode("compare")}
+              disabled={allCues.length < 2}
+              title={allCues.length < 2 ? "需要至少2个Cue才能使用对照模式" : ""}
+            >
+              前后对照
+            </button>
           </div>
         )}
       </div>
@@ -344,7 +427,288 @@ export function ScenePreview({ cue, fixtures, onSyncCue }: Props) {
         </div>
       )}
 
-      {transitioning && (
+      {viewMode === "compare" && comparison && (
+        <div className="scene-preview-compare">
+          <div className="scene-preview-compare-header">
+            <div className="scene-preview-compare-summary">
+              {comparison.summary.turnedOnCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.turnedOn.color }}>
+                  {CHANGE_TYPE_LABELS.turnedOn.icon} 开灯 {comparison.summary.turnedOnCount}台
+                </span>
+              )}
+              {comparison.summary.turnedOffCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.turnedOff.color }}>
+                  {CHANGE_TYPE_LABELS.turnedOff.icon} 关灯 {comparison.summary.turnedOffCount}台
+                </span>
+              )}
+              {comparison.summary.brightenedCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.brightened.color }}>
+                  {CHANGE_TYPE_LABELS.brightened.icon} 变亮 {comparison.summary.brightenedCount}台
+                </span>
+              )}
+              {comparison.summary.dimmedCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.dimmed.color }}>
+                  {CHANGE_TYPE_LABELS.dimmed.icon} 变暗 {comparison.summary.dimmedCount}台
+                </span>
+              )}
+              {comparison.summary.colorChangedCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.colorChanged.color }}>
+                  {CHANGE_TYPE_LABELS.colorChanged.icon} 换色 {comparison.summary.colorChangedCount}台
+                </span>
+              )}
+              {comparison.summary.prevUnmatchedCount > 0 && (
+                <span className="scene-preview-summary-tag scene-preview-summary-tag-warning">
+                  ⚠ 无法匹配 {comparison.summary.prevUnmatchedCount}台
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="scene-preview-compare-columns">
+            <div className={`scene-preview-compare-column${!comparison.prevCue ? " scene-preview-column-empty" : ""}`}>
+              <div className="scene-preview-column-header">
+                <span className="scene-preview-column-label">上一个Cue</span>
+                {comparison.prevCue ? renderCueBadge(comparison.prevCue, true) : (
+                  <span className="scene-preview-column-empty-hint">（首个Cue）</span>
+                )}
+              </div>
+              {comparison.prevCue ? (
+                <div className="scene-preview-compare-content">
+                  <div className="scene-preview-compare-brightness">
+                    <span className="scene-preview-brightness-label">亮度</span>
+                    <span className="scene-preview-brightness-value-large">
+                      {parseCueBrightness(comparison.prevCue) ?? "—"}%
+                    </span>
+                  </div>
+                  <div className="scene-preview-compare-fixtures">
+                    <span className="scene-preview-fixtures-label">灯具</span>
+                    <span className="scene-preview-fixtures-value">{comparison.prevCue.fixtures}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="scene-preview-column-placeholder">
+                  这是演出的第一个Cue
+                </div>
+              )}
+            </div>
+
+            <div className="scene-preview-compare-arrow">→</div>
+
+            <div className="scene-preview-compare-column scene-preview-column-current">
+              <div className="scene-preview-column-header">
+                <span className="scene-preview-column-label">当前Cue</span>
+                {renderCueBadge(comparison.currentCue)}
+              </div>
+              <div className="scene-preview-compare-content">
+                <div className="scene-preview-compare-brightness">
+                  <span className="scene-preview-brightness-label">亮度</span>
+                  <span className="scene-preview-brightness-value-large" style={{ color: LIGHT_TYPE_COLORS.面光 }}>
+                    {parseCueBrightness(comparison.currentCue) ?? "—"}%
+                  </span>
+                </div>
+                <div className="scene-preview-compare-fixtures">
+                  <span className="scene-preview-fixtures-label">灯具</span>
+                  <span className="scene-preview-fixtures-value">{comparison.currentCue.fixtures}</span>
+                </div>
+                {comparison.currentCue.triggerNote && (
+                  <div className="scene-preview-compare-trigger">
+                    <span className="scene-preview-trigger-label">触发</span>
+                    <span className="scene-preview-trigger-value">{comparison.currentCue.triggerNote}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="scene-preview-compare-arrow">→</div>
+
+            <div className={`scene-preview-compare-column${!comparison.nextCue ? " scene-preview-column-empty" : ""}`}>
+              <div className="scene-preview-column-header">
+                <span className="scene-preview-column-label">下一个Cue</span>
+                {comparison.nextCue ? renderCueBadge(comparison.nextCue, true) : (
+                  <span className="scene-preview-column-empty-hint">（最后一个Cue）</span>
+                )}
+              </div>
+              {comparison.nextCue ? (
+                <div className="scene-preview-compare-content">
+                  <div className="scene-preview-compare-brightness">
+                    <span className="scene-preview-brightness-label">亮度</span>
+                    <span className="scene-preview-brightness-value-large">
+                      {parseCueBrightness(comparison.nextCue) ?? "—"}%
+                    </span>
+                  </div>
+                  <div className="scene-preview-compare-fixtures">
+                    <span className="scene-preview-fixtures-label">灯具</span>
+                    <span className="scene-preview-fixtures-value">{comparison.nextCue.fixtures}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="scene-preview-column-placeholder">
+                  这是演出的最后一个Cue
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="scene-preview-compare-transitions">
+            <div className="scene-preview-transitions-section">
+              <div className="scene-preview-transitions-header">
+                <span className="scene-preview-transitions-title">
+                  ← 上一个 → 当前 变化摘要
+                </span>
+                {filterMatchedTransitions(comparison.prevTransitions).length === 0 && comparison.prevCue && (
+                  <span className="scene-preview-transitions-hint">无变化</span>
+                )}
+              </div>
+              {comparison.prevCue && (
+                <div className="scene-preview-transition-groups">
+                  {(() => {
+                    const groups = groupTransitionsByType(filterMatchedTransitions(comparison.prevTransitions));
+                    return (Object.keys(groups) as FixtureChangeType[]).map((changeType) => {
+                      const groupTransitions = groups[changeType];
+                      if (groupTransitions.length === 0) return null;
+                      const label = CHANGE_TYPE_LABELS[changeType];
+                      return (
+                        <div key={changeType} className="scene-preview-transition-group">
+                          <div className="scene-preview-transition-group-header">
+                            <span
+                              className="scene-preview-transition-group-icon"
+                              style={{ background: label.color }}
+                            >
+                              {label.icon}
+                            </span>
+                            <span className="scene-preview-transition-group-label">{label.label}</span>
+                            <span className="scene-preview-transition-group-count">{groupTransitions.length}台</span>
+                          </div>
+                          <div className="scene-preview-transition-fixtures">
+                            {groupTransitions.map((t) => {
+                              const typeColor = LIGHT_TYPE_COLORS[t.type];
+                              return (
+                                <div key={t.fixtureId} className="scene-preview-transition-fixture">
+                                  <div className="scene-preview-transition-fixture-header">
+                                    <span className="scene-preview-transition-fixture-number" style={{ color: typeColor }}>
+                                      {t.fixtureNumber}
+                                    </span>
+                                    <span className="scene-preview-transition-fixture-channel">{t.channel}</span>
+                                  </div>
+                                  <div className="scene-preview-transition-brightness">
+                                    <span className="scene-preview-transition-brightness-old">
+                                      {t.fromState?.brightness ?? "—"}%
+                                    </span>
+                                    <span className="scene-preview-transition-arrow" style={{ color: label.color }}>
+                                      {t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
+                                    </span>
+                                    <span className="scene-preview-transition-brightness-new" style={{ color: typeColor }}>
+                                      {t.toState?.brightness ?? "—"}%
+                                    </span>
+                                    {t.brightnessDelta !== null && (
+                                      <span
+                                        className={`scene-preview-transition-delta${t.brightnessDelta > 0 ? " scene-preview-delta-up" : t.brightnessDelta < 0 ? " scene-preview-delta-down" : ""}`}
+                                      >
+                                        {t.brightnessDelta > 0 ? "+" : ""}{t.brightnessDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {t.changeTypes.includes("colorChanged") && (
+                                    <div className="scene-preview-transition-color">
+                                      <span
+                                        className="scene-preview-color-swatch"
+                                        style={{ background: colorToSwatch(t.fromState?.color ?? "") }}
+                                      />
+                                      <span className="scene-preview-transition-arrow" style={{ color: CHANGE_TYPE_LABELS.colorChanged.color }}>→</span>
+                                      <span
+                                        className="scene-preview-color-swatch"
+                                        style={{ background: colorToSwatch(t.toState?.color ?? "") }}
+                                      />
+                                      <span className="scene-preview-transition-color-text">{t.toState?.color}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </div>
+
+            <div className="scene-preview-transitions-section">
+              <div className="scene-preview-transitions-header">
+                <span className="scene-preview-transitions-title">
+                  当前 → 下一个 变化预览 →
+                </span>
+                {filterMatchedTransitions(comparison.nextTransitions).length === 0 && comparison.nextCue && (
+                  <span className="scene-preview-transitions-hint">无变化</span>
+                )}
+              </div>
+              {comparison.nextCue && (
+                <div className="scene-preview-transition-groups">
+                  {(() => {
+                    const groups = groupTransitionsByType(filterMatchedTransitions(comparison.nextTransitions));
+                    return (Object.keys(groups) as FixtureChangeType[]).map((changeType) => {
+                      const groupTransitions = groups[changeType];
+                      if (groupTransitions.length === 0) return null;
+                      const label = CHANGE_TYPE_LABELS[changeType];
+                      return (
+                        <div key={changeType} className="scene-preview-transition-group scene-preview-transition-group-future">
+                          <div className="scene-preview-transition-group-header">
+                            <span
+                              className="scene-preview-transition-group-icon"
+                              style={{ background: label.color, opacity: 0.7 }}
+                            >
+                              {label.icon}
+                            </span>
+                            <span className="scene-preview-transition-group-label">{label.label}</span>
+                            <span className="scene-preview-transition-group-count">{groupTransitions.length}台</span>
+                          </div>
+                          <div className="scene-preview-transition-fixtures">
+                            {groupTransitions.map((t) => {
+                              const typeColor = LIGHT_TYPE_COLORS[t.type];
+                              return (
+                                <div key={t.fixtureId} className="scene-preview-transition-fixture scene-preview-transition-fixture-future">
+                                  <div className="scene-preview-transition-fixture-header">
+                                    <span className="scene-preview-transition-fixture-number" style={{ color: typeColor, opacity: 0.8 }}>
+                                      {t.fixtureNumber}
+                                    </span>
+                                    <span className="scene-preview-transition-fixture-channel">{t.channel}</span>
+                                  </div>
+                                  <div className="scene-preview-transition-brightness">
+                                    <span className="scene-preview-transition-brightness-old">
+                                      {t.fromState?.brightness ?? "—"}%
+                                    </span>
+                                    <span className="scene-preview-transition-arrow" style={{ color: label.color, opacity: 0.7 }}>
+                                      {t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
+                                    </span>
+                                    <span className="scene-preview-transition-brightness-new" style={{ color: typeColor, opacity: 0.8 }}>
+                                      {t.toState?.brightness ?? "—"}%
+                                    </span>
+                                    {t.brightnessDelta !== null && (
+                                      <span
+                                        className={`scene-preview-transition-delta${t.brightnessDelta > 0 ? " scene-preview-delta-up" : t.brightnessDelta < 0 ? " scene-preview-delta-down" : ""}`}
+                                        style={{ opacity: 0.7 }}
+                                      >
+                                        {t.brightnessDelta > 0 ? "+" : ""}{t.brightnessDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transitioning && viewMode === "single" && (
         <div className="scene-preview-transition-indicator">
           <span className="scene-preview-transition-dot" />
           过渡中…

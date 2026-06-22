@@ -542,7 +542,7 @@ function App() {
         />
       )}
 
-      <ScenePreview cue={selectedCue} fixtures={fixtures} onSyncCue={handleSyncCue} />
+      <ScenePreview cue={selectedCue} allCues={cues} fixtures={fixtures} onSyncCue={handleSyncCue} />
 
       <CueVersionCompare
         currentCues={cues}

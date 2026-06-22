@@ -683,6 +683,198 @@ export function normalizeVersionSnapshot(snapshot: any): VersionSnapshot {
   };
 }
 
+export type FixtureChangeType = "turnedOn" | "turnedOff" | "brightened" | "dimmed" | "colorChanged" | "unchanged";
+
+export interface FixtureCueState {
+  fixtureId: string;
+  fixtureNumber: string;
+  channel: string;
+  type: LightType;
+  brightness: number | null;
+  color: string;
+  focus: string;
+  notes: string;
+  matched: boolean;
+}
+
+export interface FixtureTransition {
+  fixtureId: string;
+  fixtureNumber: string;
+  channel: string;
+  type: LightType;
+  fromState: FixtureCueState | null;
+  toState: FixtureCueState | null;
+  changeTypes: FixtureChangeType[];
+  brightnessDelta: number | null;
+}
+
+export interface CueComparisonResult {
+  prevCue: Cue | null;
+  currentCue: Cue;
+  nextCue: Cue | null;
+  prevTransitions: FixtureTransition[];
+  nextTransitions: FixtureTransition[];
+  summary: {
+    turnedOnCount: number;
+    turnedOffCount: number;
+    brightenedCount: number;
+    dimmedCount: number;
+    colorChangedCount: number;
+    prevUnmatchedCount: number;
+    nextUnmatchedCount: number;
+  };
+}
+
+function getFixtureCueState(cue: Cue | null, fixture: LightFixture): FixtureCueState {
+  if (!cue) {
+    return {
+      fixtureId: fixture.id,
+      fixtureNumber: fixture.number,
+      channel: fixture.channel,
+      type: fixture.type,
+      brightness: null,
+      color: fixture.color,
+      focus: fixture.focus,
+      notes: fixture.notes,
+      matched: false,
+    };
+  }
+
+  const cueFixtures = parseCueFixtures(cue, [fixture]);
+  const isMatched = cueFixtures.length > 0;
+  const cueBrightness = parseCueBrightness(cue);
+
+  return {
+    fixtureId: fixture.id,
+    fixtureNumber: fixture.number,
+    channel: fixture.channel,
+    type: fixture.type,
+    brightness: isMatched ? (cueBrightness ?? fixture.brightness) : null,
+    color: fixture.color,
+    focus: fixture.focus,
+    notes: fixture.notes,
+    matched: isMatched,
+  };
+}
+
+function getCueAllFixturesState(cue: Cue | null, allFixtures: LightFixture[]): Map<string, FixtureCueState> {
+  const stateMap = new Map<string, FixtureCueState>();
+  for (const f of allFixtures) {
+    stateMap.set(f.id, getFixtureCueState(cue, f));
+  }
+  return stateMap;
+}
+
+function determineChangeTypes(from: FixtureCueState | null, to: FixtureCueState | null): FixtureChangeType[] {
+  const changes: FixtureChangeType[] = [];
+
+  const fromBrightness = from?.brightness ?? null;
+  const toBrightness = to?.brightness ?? null;
+  const fromColor = from?.color ?? "";
+  const toColor = to?.color ?? "";
+
+  if (fromBrightness === null && toBrightness !== null && toBrightness > 0) {
+    changes.push("turnedOn");
+  } else if (fromBrightness !== null && fromBrightness > 0 && (toBrightness === null || toBrightness === 0)) {
+    changes.push("turnedOff");
+  } else if (fromBrightness !== null && toBrightness !== null && toBrightness > 0) {
+    if (toBrightness > fromBrightness) {
+      changes.push("brightened");
+    } else if (toBrightness < fromBrightness) {
+      changes.push("dimmed");
+    }
+  }
+
+  if (fromColor && toColor && fromColor !== toColor) {
+    changes.push("colorChanged");
+  }
+
+  if (changes.length === 0) {
+    changes.push("unchanged");
+  }
+
+  return changes;
+}
+
+function calculateBrightnessDelta(from: FixtureCueState | null, to: FixtureCueState | null): number | null {
+  const fromBrightness = from?.brightness;
+  const toBrightness = to?.brightness;
+
+  if (fromBrightness == null || toBrightness == null) return null;
+  return toBrightness - fromBrightness;
+}
+
+function buildTransitions(
+  fromCue: Cue | null,
+  toCue: Cue,
+  allFixtures: LightFixture[]
+): FixtureTransition[] {
+  const fromStates = getCueAllFixturesState(fromCue, allFixtures);
+  const toStates = getCueAllFixturesState(toCue, allFixtures);
+  const transitions: FixtureTransition[] = [];
+
+  const allFixtureIds = new Set([...fromStates.keys(), ...toStates.keys()]);
+
+  for (const fixtureId of allFixtureIds) {
+    const fromState = fromStates.get(fixtureId) ?? null;
+    const toState = toStates.get(fixtureId) ?? null;
+
+    if (!toState) continue;
+
+    const changeTypes = determineChangeTypes(fromState, toState);
+    const brightnessDelta = calculateBrightnessDelta(fromState, toState);
+
+    transitions.push({
+      fixtureId,
+      fixtureNumber: toState.fixtureNumber,
+      channel: toState.channel,
+      type: toState.type,
+      fromState,
+      toState,
+      changeTypes,
+      brightnessDelta,
+    });
+  }
+
+  return transitions;
+}
+
+export function compareAdjacentCues(
+  currentCue: Cue,
+  allCues: Cue[],
+  allFixtures: LightFixture[]
+): CueComparisonResult {
+  const currentIndex = allCues.findIndex((c) => c.id === currentCue.id);
+  const prevCue = currentIndex > 0 ? allCues[currentIndex - 1] : null;
+  const nextCue = currentIndex >= 0 && currentIndex < allCues.length - 1 ? allCues[currentIndex + 1] : null;
+
+  const prevTransitions = prevCue ? buildTransitions(prevCue, currentCue, allFixtures) : [];
+  const nextTransitions = nextCue ? buildTransitions(currentCue, nextCue, allFixtures) : [];
+
+  const countChanges = (transitions: FixtureTransition[], type: FixtureChangeType) =>
+    transitions.filter((t) => t.changeTypes.includes(type) && t.toState?.matched).length;
+
+  const countUnmatched = (transitions: FixtureTransition[]) =>
+    transitions.filter((t) => !t.toState?.matched).length;
+
+  return {
+    prevCue,
+    currentCue,
+    nextCue,
+    prevTransitions,
+    nextTransitions,
+    summary: {
+      turnedOnCount: countChanges(prevTransitions, "turnedOn"),
+      turnedOffCount: countChanges(prevTransitions, "turnedOff"),
+      brightenedCount: countChanges(prevTransitions, "brightened"),
+      dimmedCount: countChanges(prevTransitions, "dimmed"),
+      colorChangedCount: countChanges(prevTransitions, "colorChanged"),
+      prevUnmatchedCount: prevCue ? countUnmatched(prevTransitions) : 0,
+      nextUnmatchedCount: nextCue ? countUnmatched(nextTransitions) : 0,
+    },
+  };
+}
+
 export function buildFixturesString(fixtureIds: string[], allFixtures: LightFixture[] = FIXTURES): string {
   if (fixtureIds.length === 0) return "";
 

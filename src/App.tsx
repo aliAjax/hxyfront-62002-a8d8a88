@@ -92,6 +92,7 @@ function App() {
   const [editingCue, setEditingCue] = useState<Cue | null>(null);
   const [versionNotes, setVersionNotes] = useState<VersionNote[]>(() => initialAppDataRef.current!.versionNotes);
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+  const [noteCueFilter, setNoteCueFilter] = useState<string | null>(null);
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
   const [importOpen, setImportOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
@@ -293,6 +294,14 @@ function App() {
     const lockId = Date.now();
     transitionLockRef.current = lockId;
     setSelectedCueId(cueId);
+    const cue = cues.find((c) => c.id === cueId);
+    if (cue) {
+      setNoteCueFilter(cue.number);
+    }
+  }, [cues]);
+
+  const handleNoteCueFilterChange = useCallback((cueNumber: string | null) => {
+    setNoteCueFilter(cueNumber);
   }, []);
 
   const handleSyncCue = useCallback((syncedCue: Cue) => {
@@ -542,7 +551,12 @@ function App() {
         onLocateFixtures={handleLocateFixtures}
       />
 
-      <VersionNotesPanel notes={versionNotes} onChange={setVersionNotes} />
+      <VersionNotesPanel
+        notes={versionNotes}
+        onChange={setVersionNotes}
+        cueFilter={noteCueFilter}
+        onCueFilterChange={handleNoteCueFilterChange}
+      />
 
       <CueEditDrawer
         open={drawerOpen}

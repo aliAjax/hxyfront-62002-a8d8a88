@@ -7,9 +7,11 @@ type FilterType = "all" | "pending" | "confirmed";
 interface Props {
   notes: VersionNote[];
   onChange: (notes: VersionNote[]) => void;
+  cueFilter?: string | null;
+  onCueFilterChange?: (cueNumber: string | null) => void;
 }
 
-export function VersionNotesPanel({ notes, onChange }: Props) {
+export function VersionNotesPanel({ notes, onChange, cueFilter, onCueFilterChange }: Props) {
   const [filter, setFilter] = useState<FilterType>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<VersionNote | null>(null);
@@ -18,7 +20,23 @@ export function VersionNotesPanel({ notes, onChange }: Props) {
     if (filter === "pending") return !note.confirmed;
     if (filter === "confirmed") return note.confirmed;
     return true;
+  }).filter((note) => {
+    if (!cueFilter) return true;
+    const cues = note.relatedCues.split(",").map((c) => c.trim());
+    return cues.some((c) => c.toLowerCase() === cueFilter.toLowerCase());
   });
+
+  const handleCueTagClick = (cue: string) => {
+    if (onCueFilterChange) {
+      onCueFilterChange(cue.trim());
+    }
+  };
+
+  const handleClearCueFilter = () => {
+    if (onCueFilterChange) {
+      onCueFilterChange(null);
+    }
+  };
 
   const handleAdd = () => {
     setEditingNote(null);
@@ -86,6 +104,20 @@ export function VersionNotesPanel({ notes, onChange }: Props) {
         </div>
       </div>
 
+      {cueFilter && (
+        <div className="version-notes-cue-filter-bar">
+          <span className="cue-filter-label">当前筛选：</span>
+          <span className="cue-filter-tag">{cueFilter}</span>
+          <button className="cue-filter-clear" onClick={handleClearCueFilter}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+            清除筛选
+          </button>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="version-notes-empty">
           <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -95,10 +127,20 @@ export function VersionNotesPanel({ notes, onChange }: Props) {
             <path d="M44 39v5M44 47v0" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
           </svg>
           <p className="version-notes-empty-title">
-            {filter === "all" ? "暂无演出版本备注" : filter === "pending" ? "暂无待确认备注" : "暂无已确认备注"}
+            {cueFilter
+              ? `「${cueFilter}」暂无相关备注`
+              : filter === "all"
+              ? "暂无演出版本备注"
+              : filter === "pending"
+              ? "暂无待确认备注"
+              : "暂无已确认备注"}
           </p>
           <p className="version-notes-empty-hint">
-            {filter === "all" ? "点击右上角「新增备注」记录灯光调整说明" : "切换筛选条件查看其他备注"}
+            {cueFilter
+              ? "点击上方「清除筛选」查看全部备注，或新增备注关联此Cue"
+              : filter === "all"
+              ? "点击右上角「新增备注」记录灯光调整说明"
+              : "切换筛选条件查看其他备注"}
           </p>
         </div>
       ) : (
@@ -117,9 +159,20 @@ export function VersionNotesPanel({ notes, onChange }: Props) {
 
               <div className="version-note-cues">
                 <span className="version-note-field-label">关联Cue：</span>
-                {note.relatedCues.split(",").map((cue, i) => (
-                  <span key={i} className="version-note-cue-tag">{cue.trim()}</span>
-                ))}
+                {note.relatedCues.split(",").map((cue, i) => {
+                  const trimmedCue = cue.trim();
+                  const isActive = cueFilter?.toLowerCase() === trimmedCue.toLowerCase();
+                  return (
+                    <button
+                      key={i}
+                      className={`version-note-cue-tag${isActive ? " active" : ""}${onCueFilterChange ? " clickable" : ""}`}
+                      onClick={() => onCueFilterChange && handleCueTagClick(trimmedCue)}
+                      title={onCueFilterChange ? `点击筛选「${trimmedCue}」相关备注` : undefined}
+                    >
+                      {trimmedCue}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="version-note-reason">

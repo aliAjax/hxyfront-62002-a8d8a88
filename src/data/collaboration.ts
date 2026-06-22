@@ -146,50 +146,6 @@ const CONFLICT_FIELD_LABELS: Record<string, string> = {
   versionNote: "版本备注",
 };
 
-const CUE_MERGE_FIELDS = Object.keys(CONFLICT_FIELD_LABELS) as (keyof Cue)[];
-const VERSION_NOTE_MERGE_FIELDS = [
-  "versionName",
-  "relatedCues",
-  "adjustmentReason",
-  "pendingItems",
-  "confirmed",
-] as const;
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function valuesEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function mergeValue<T>(baseValue: T, leftValue: T, rightValue: T): T {
-  const leftChanged = !valuesEqual(leftValue, baseValue);
-  const rightChanged = !valuesEqual(rightValue, baseValue);
-
-  if (leftChanged && !rightChanged) return clone(leftValue);
-  if (!leftChanged && rightChanged) return clone(rightValue);
-  if (leftChanged && rightChanged && valuesEqual(leftValue, rightValue)) {
-    return clone(leftValue);
-  }
-
-  return clone(baseValue);
-}
-
-function getOrderSignature(cues: Cue[]): string {
-  return cues.map((cue) => cue.id).join("|");
-}
-
-function applyCueOrder(target: Cue[], orderedSource: Cue[]): Cue[] {
-  const targetMap = new Map(target.map((cue) => [cue.id, cue]));
-  const ordered = orderedSource
-    .map((cue) => targetMap.get(cue.id))
-    .filter((cue): cue is Cue => Boolean(cue));
-  const orderedIds = new Set(ordered.map((cue) => cue.id));
-  const remaining = target.filter((cue) => !orderedIds.has(cue.id));
-  return [...ordered, ...remaining];
-}
-
 export function createEditorState(
   baseFixtures: LightFixture[],
   baseCues: Cue[],
@@ -439,64 +395,16 @@ export function mergeStates(
   rightState: EditorState,
   resolutions: Map<string, ResolvedConflict>
 ): MergeResult {
-  const mergedFixtures = clone(baseState.fixtures);
-  let mergedCues = clone(baseState.cues);
-  const mergedVersionNotes = clone(baseState.versionNotes);
+  const mergedFixtures = JSON.parse(JSON.stringify(baseState.fixtures)) as LightFixture[];
+  const mergedCues = JSON.parse(JSON.stringify(baseState.cues)) as Cue[];
+  const mergedVersionNotes = JSON.parse(JSON.stringify(baseState.versionNotes)) as VersionNote[];
 
-  const baseFixtureMap = new Map(baseState.fixtures.map((f) => [f.id, f]));
   const leftFixtureMap = new Map(leftState.fixtures.map((f) => [f.id, f]));
   const rightFixtureMap = new Map(rightState.fixtures.map((f) => [f.id, f]));
-  const baseCueMap = new Map(baseState.cues.map((c) => [c.id, c]));
   const leftCueMap = new Map(leftState.cues.map((c) => [c.id, c]));
   const rightCueMap = new Map(rightState.cues.map((c) => [c.id, c]));
-  const baseNoteMap = new Map(baseState.versionNotes.map((n) => [n.id, n]));
   const leftNoteMap = new Map(leftState.versionNotes.map((n) => [n.id, n]));
   const rightNoteMap = new Map(rightState.versionNotes.map((n) => [n.id, n]));
-
-  for (const fixture of mergedFixtures) {
-    const baseFixture = baseFixtureMap.get(fixture.id);
-    const leftFixture = leftFixtureMap.get(fixture.id);
-    const rightFixture = rightFixtureMap.get(fixture.id);
-    if (!baseFixture || !leftFixture || !rightFixture) continue;
-    fixture.brightness = mergeValue(
-      baseFixture.brightness,
-      leftFixture.brightness,
-      rightFixture.brightness
-    );
-  }
-
-  for (const cue of mergedCues) {
-    const baseCue = baseCueMap.get(cue.id);
-    const leftCue = leftCueMap.get(cue.id);
-    const rightCue = rightCueMap.get(cue.id);
-    if (!baseCue || !leftCue || !rightCue) continue;
-
-    for (const field of CUE_MERGE_FIELDS) {
-      cue[field] = mergeValue(baseCue[field], leftCue[field], rightCue[field]);
-    }
-  }
-
-  const baseOrder = getOrderSignature(baseState.cues);
-  const leftOrder = getOrderSignature(leftState.cues);
-  const rightOrder = getOrderSignature(rightState.cues);
-  if (leftOrder !== baseOrder && rightOrder === baseOrder) {
-    mergedCues = applyCueOrder(mergedCues, leftState.cues);
-  } else if (rightOrder !== baseOrder && leftOrder === baseOrder) {
-    mergedCues = applyCueOrder(mergedCues, rightState.cues);
-  } else if (leftOrder !== baseOrder && leftOrder === rightOrder) {
-    mergedCues = applyCueOrder(mergedCues, leftState.cues);
-  }
-
-  for (const note of mergedVersionNotes) {
-    const baseNote = baseNoteMap.get(note.id);
-    const leftNote = leftNoteMap.get(note.id);
-    const rightNote = rightNoteMap.get(note.id);
-    if (!baseNote || !leftNote || !rightNote) continue;
-
-    for (const field of VERSION_NOTE_MERGE_FIELDS) {
-      note[field] = mergeValue(baseNote[field], leftNote[field], rightNote[field]);
-    }
-  }
 
   let resolvedCount = 0;
   let unresolvedCount = 0;

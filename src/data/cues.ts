@@ -683,7 +683,7 @@ export function normalizeVersionSnapshot(snapshot: any): VersionSnapshot {
   };
 }
 
-export type FixtureChangeType = "turnedOn" | "turnedOff" | "brightened" | "dimmed" | "colorChanged" | "unchanged";
+export type FixtureChangeType = "turnedOn" | "turnedOff" | "brightened" | "dimmed" | "added" | "removed" | "unchanged";
 
 export interface FixtureCueState {
   fixtureId: string;
@@ -719,9 +719,10 @@ export interface CueComparisonResult {
     turnedOffCount: number;
     brightenedCount: number;
     dimmedCount: number;
-    colorChangedCount: number;
-    prevUnmatchedCount: number;
-    nextUnmatchedCount: number;
+    addedCount: number;
+    removedCount: number;
+    currentCueUnmatched: boolean;
+    nextCueUnmatched: boolean;
   };
 }
 
@@ -765,28 +766,42 @@ function getCueAllFixturesState(cue: Cue | null, allFixtures: LightFixture[]): M
   return stateMap;
 }
 
+function isCueUnmatched(cue: Cue, allFixtures: LightFixture[]): boolean {
+  if (!cue.fixtures || !cue.fixtures.trim()) return false;
+  const matched = parseCueFixtures(cue, allFixtures);
+  return matched.length === 0;
+}
+
 function determineChangeTypes(from: FixtureCueState | null, to: FixtureCueState | null): FixtureChangeType[] {
   const changes: FixtureChangeType[] = [];
 
+  const fromMatched = from?.matched ?? false;
+  const toMatched = to?.matched ?? false;
   const fromBrightness = from?.brightness ?? null;
   const toBrightness = to?.brightness ?? null;
-  const fromColor = from?.color ?? "";
-  const toColor = to?.color ?? "";
 
-  if (fromBrightness === null && toBrightness !== null && toBrightness > 0) {
-    changes.push("turnedOn");
-  } else if (fromBrightness !== null && fromBrightness > 0 && (toBrightness === null || toBrightness === 0)) {
-    changes.push("turnedOff");
-  } else if (fromBrightness !== null && toBrightness !== null && toBrightness > 0) {
-    if (toBrightness > fromBrightness) {
-      changes.push("brightened");
-    } else if (toBrightness < fromBrightness) {
-      changes.push("dimmed");
+  if (!fromMatched && toMatched) {
+    if (toBrightness !== null && toBrightness > 0) {
+      changes.push("turnedOn");
+    } else if (toBrightness !== null && toBrightness === 0) {
+      changes.push("added");
+    } else {
+      changes.push("added");
     }
-  }
-
-  if (fromColor && toColor && fromColor !== toColor) {
-    changes.push("colorChanged");
+  } else if (fromMatched && !toMatched) {
+    changes.push("removed");
+  } else if (fromMatched && toMatched) {
+    if (fromBrightness !== null && fromBrightness === 0 && toBrightness !== null && toBrightness > 0) {
+      changes.push("turnedOn");
+    } else if (fromBrightness !== null && fromBrightness > 0 && toBrightness !== null && toBrightness === 0) {
+      changes.push("turnedOff");
+    } else if (fromBrightness !== null && toBrightness !== null && fromBrightness > 0 && toBrightness > 0) {
+      if (toBrightness > fromBrightness) {
+        changes.push("brightened");
+      } else if (toBrightness < fromBrightness) {
+        changes.push("dimmed");
+      }
+    }
   }
 
   if (changes.length === 0) {
@@ -852,10 +867,7 @@ export function compareAdjacentCues(
   const nextTransitions = nextCue ? buildTransitions(currentCue, nextCue, allFixtures) : [];
 
   const countChanges = (transitions: FixtureTransition[], type: FixtureChangeType) =>
-    transitions.filter((t) => t.changeTypes.includes(type) && t.toState?.matched).length;
-
-  const countUnmatched = (transitions: FixtureTransition[]) =>
-    transitions.filter((t) => !t.toState?.matched).length;
+    transitions.filter((t) => t.changeTypes.includes(type) && (t.toState?.matched || t.fromState?.matched)).length;
 
   return {
     prevCue,
@@ -868,9 +880,10 @@ export function compareAdjacentCues(
       turnedOffCount: countChanges(prevTransitions, "turnedOff"),
       brightenedCount: countChanges(prevTransitions, "brightened"),
       dimmedCount: countChanges(prevTransitions, "dimmed"),
-      colorChangedCount: countChanges(prevTransitions, "colorChanged"),
-      prevUnmatchedCount: prevCue ? countUnmatched(prevTransitions) : 0,
-      nextUnmatchedCount: nextCue ? countUnmatched(nextTransitions) : 0,
+      addedCount: countChanges(prevTransitions, "added"),
+      removedCount: countChanges(prevTransitions, "removed"),
+      currentCueUnmatched: isCueUnmatched(currentCue, allFixtures),
+      nextCueUnmatched: nextCue ? isCueUnmatched(nextCue, allFixtures) : false,
     },
   };
 }

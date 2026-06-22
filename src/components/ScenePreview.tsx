@@ -51,7 +51,8 @@ const CHANGE_TYPE_LABELS: Record<FixtureChangeType, { label: string; color: stri
   turnedOff: { label: "关灯", color: "#64748b", icon: "↓" },
   brightened: { label: "变亮", color: "#f97316", icon: "↗" },
   dimmed: { label: "变暗", color: "#0ea5e9", icon: "↘" },
-  colorChanged: { label: "换色", color: "#a855f7", icon: "◐" },
+  added: { label: "新增", color: "#8b5cf6", icon: "+" },
+  removed: { label: "移除", color: "#ef4444", icon: "−" },
   unchanged: { label: "无变化", color: "#94a3b8", icon: "—" },
 };
 
@@ -217,7 +218,7 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
   };
 
   const filterMatchedTransitions = (transitions: FixtureTransition[]) =>
-    transitions.filter((t) => t.toState?.matched && !t.changeTypes.includes("unchanged"));
+    transitions.filter((t) => (t.toState?.matched || t.fromState?.matched) && !t.changeTypes.includes("unchanged"));
 
   const groupTransitionsByType = (transitions: FixtureTransition[]) => {
     const groups: Record<FixtureChangeType, FixtureTransition[]> = {
@@ -225,7 +226,8 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
       turnedOff: [],
       brightened: [],
       dimmed: [],
-      colorChanged: [],
+      added: [],
+      removed: [],
       unchanged: [],
     };
     for (const t of transitions) {
@@ -239,7 +241,7 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
   };
 
   const getPrimaryChangeType = (transition: FixtureTransition): FixtureChangeType => {
-    const priority: FixtureChangeType[] = ["colorChanged", "turnedOn", "turnedOff", "brightened", "dimmed"];
+    const priority: FixtureChangeType[] = ["turnedOn", "turnedOff", "added", "removed", "brightened", "dimmed"];
     for (const p of priority) {
       if (transition.changeTypes.includes(p)) return p;
     }
@@ -451,14 +453,24 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                   {CHANGE_TYPE_LABELS.dimmed.icon} 变暗 {comparison.summary.dimmedCount}台
                 </span>
               )}
-              {comparison.summary.colorChangedCount > 0 && (
-                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.colorChanged.color }}>
-                  {CHANGE_TYPE_LABELS.colorChanged.icon} 换色 {comparison.summary.colorChangedCount}台
+              {comparison.summary.addedCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.added.color }}>
+                  {CHANGE_TYPE_LABELS.added.icon} 新增 {comparison.summary.addedCount}台
                 </span>
               )}
-              {comparison.summary.prevUnmatchedCount > 0 && (
+              {comparison.summary.removedCount > 0 && (
+                <span className="scene-preview-summary-tag" style={{ background: CHANGE_TYPE_LABELS.removed.color }}>
+                  {CHANGE_TYPE_LABELS.removed.icon} 移除 {comparison.summary.removedCount}台
+                </span>
+              )}
+              {comparison.summary.currentCueUnmatched && (
                 <span className="scene-preview-summary-tag scene-preview-summary-tag-warning">
-                  ⚠ 无法匹配 {comparison.summary.prevUnmatchedCount}台
+                  ⚠ 当前Cue无法匹配灯具
+                </span>
+              )}
+              {!comparison.summary.currentCueUnmatched && comparison.summary.nextCueUnmatched && (
+                <span className="scene-preview-summary-tag scene-preview-summary-tag-warning">
+                  ⚠ 下一个Cue无法匹配灯具
                 </span>
               )}
             </div>
@@ -582,10 +594,11 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                           <div className="scene-preview-transition-fixtures">
                             {groupTransitions.map((t) => {
                               const typeColor = LIGHT_TYPE_COLORS[t.type];
+                              const isRemoved = t.changeTypes.includes("removed");
                               return (
-                                <div key={t.fixtureId} className="scene-preview-transition-fixture">
+                                <div key={t.fixtureId} className={`scene-preview-transition-fixture${isRemoved ? " scene-preview-transition-fixture-removed" : ""}`}>
                                   <div className="scene-preview-transition-fixture-header">
-                                    <span className="scene-preview-transition-fixture-number" style={{ color: typeColor }}>
+                                    <span className="scene-preview-transition-fixture-number" style={{ color: isRemoved ? "#94a3b8" : typeColor }}>
                                       {t.fixtureNumber}
                                     </span>
                                     <span className="scene-preview-transition-fixture-channel">{t.channel}</span>
@@ -595,12 +608,12 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                                       {t.fromState?.brightness ?? "—"}%
                                     </span>
                                     <span className="scene-preview-transition-arrow" style={{ color: label.color }}>
-                                      {t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
+                                      {isRemoved ? "×" : t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
                                     </span>
-                                    <span className="scene-preview-transition-brightness-new" style={{ color: typeColor }}>
-                                      {t.toState?.brightness ?? "—"}%
+                                    <span className="scene-preview-transition-brightness-new" style={{ color: isRemoved ? "#94a3b8" : typeColor }}>
+                                      {isRemoved ? "停用" : (t.toState?.brightness ?? "—") + "%"}
                                     </span>
-                                    {t.brightnessDelta !== null && (
+                                    {t.brightnessDelta !== null && !isRemoved && (
                                       <span
                                         className={`scene-preview-transition-delta${t.brightnessDelta > 0 ? " scene-preview-delta-up" : t.brightnessDelta < 0 ? " scene-preview-delta-down" : ""}`}
                                       >
@@ -608,20 +621,6 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                                       </span>
                                     )}
                                   </div>
-                                  {t.changeTypes.includes("colorChanged") && (
-                                    <div className="scene-preview-transition-color">
-                                      <span
-                                        className="scene-preview-color-swatch"
-                                        style={{ background: colorToSwatch(t.fromState?.color ?? "") }}
-                                      />
-                                      <span className="scene-preview-transition-arrow" style={{ color: CHANGE_TYPE_LABELS.colorChanged.color }}>→</span>
-                                      <span
-                                        className="scene-preview-color-swatch"
-                                        style={{ background: colorToSwatch(t.toState?.color ?? "") }}
-                                      />
-                                      <span className="scene-preview-transition-color-text">{t.toState?.color}</span>
-                                    </div>
-                                  )}
                                 </div>
                               );
                             })}
@@ -666,10 +665,11 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                           <div className="scene-preview-transition-fixtures">
                             {groupTransitions.map((t) => {
                               const typeColor = LIGHT_TYPE_COLORS[t.type];
+                              const isRemoved = t.changeTypes.includes("removed");
                               return (
-                                <div key={t.fixtureId} className="scene-preview-transition-fixture scene-preview-transition-fixture-future">
+                                <div key={t.fixtureId} className={`scene-preview-transition-fixture scene-preview-transition-fixture-future${isRemoved ? " scene-preview-transition-fixture-removed" : ""}`}>
                                   <div className="scene-preview-transition-fixture-header">
-                                    <span className="scene-preview-transition-fixture-number" style={{ color: typeColor, opacity: 0.8 }}>
+                                    <span className="scene-preview-transition-fixture-number" style={{ color: isRemoved ? "#94a3b8" : typeColor, opacity: isRemoved ? 0.6 : 0.8 }}>
                                       {t.fixtureNumber}
                                     </span>
                                     <span className="scene-preview-transition-fixture-channel">{t.channel}</span>
@@ -679,12 +679,12 @@ export function ScenePreview({ cue, allCues, fixtures, onSyncCue }: Props) {
                                       {t.fromState?.brightness ?? "—"}%
                                     </span>
                                     <span className="scene-preview-transition-arrow" style={{ color: label.color, opacity: 0.7 }}>
-                                      {t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
+                                      {isRemoved ? "×" : t.brightnessDelta !== null && t.brightnessDelta > 0 ? "↗" : t.brightnessDelta !== null && t.brightnessDelta < 0 ? "↘" : "→"}
                                     </span>
-                                    <span className="scene-preview-transition-brightness-new" style={{ color: typeColor, opacity: 0.8 }}>
-                                      {t.toState?.brightness ?? "—"}%
+                                    <span className="scene-preview-transition-brightness-new" style={{ color: isRemoved ? "#94a3b8" : typeColor, opacity: isRemoved ? 0.6 : 0.8 }}>
+                                      {isRemoved ? "停用" : (t.toState?.brightness ?? "—") + "%"}
                                     </span>
-                                    {t.brightnessDelta !== null && (
+                                    {t.brightnessDelta !== null && !isRemoved && (
                                       <span
                                         className={`scene-preview-transition-delta${t.brightnessDelta > 0 ? " scene-preview-delta-up" : t.brightnessDelta < 0 ? " scene-preview-delta-down" : ""}`}
                                         style={{ opacity: 0.7 }}

@@ -2415,6 +2415,13 @@ textarea {
   opacity: 0.85;
 }
 
+.scene-preview-transition-fixture-removed {
+  background: #fef2f2;
+  border: 1px dashed #fecaca;
+  text-decoration: line-through;
+  text-decoration-color: #fca5a5;
+}
+
 .scene-preview-transition-fixture-header {
   display: flex;
   align-items: center;

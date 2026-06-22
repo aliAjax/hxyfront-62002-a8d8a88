@@ -12,7 +12,7 @@ import { CueVersionCompare } from "./components/CueVersionCompare";
 import { DraftBanner, type DraftBannerMode } from "./components/DraftBanner";
 import { CollaborationConflictSimulator } from "./components/CollaborationConflictSimulator";
 import { FIXTURES, type LightFixture } from "./data/fixtures";
-import { INITIAL_CUES, type Cue } from "./data/cues";
+import { INITIAL_CUES, type Cue, type RehearsalMark } from "./data/cues";
 import { INITIAL_VERSION_NOTES, type VersionNote } from "./data/versionNotes";
 import {
   saveDraft,
@@ -94,6 +94,7 @@ function App() {
   const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
   const [noteCueFilter, setNoteCueFilter] = useState<string | null>(null);
   const [cueViewMode, setCueViewMode] = useState<"list" | "timeline">("timeline");
+  const [rehearsalMarkFilter, setRehearsalMarkFilter] = useState<RehearsalMark | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
   const transitionLockRef = useRef<number>(0);
@@ -320,6 +321,16 @@ function App() {
     setCues(newCues);
   }, []);
 
+  const handleToggleRehearsalMark = useCallback((cueId: string, mark: RehearsalMark | null) => {
+    setCues((prev) => {
+      const idx = prev.findIndex((c) => c.id === cueId);
+      if (idx < 0) return prev;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], rehearsalMark: mark };
+      return updated;
+    });
+  }, []);
+
   const handleImportClick = useCallback(() => {
     setImportOpen(true);
   }, []);
@@ -524,9 +535,12 @@ function App() {
           onEdit={handleEditCue}
           selectedCueId={selectedCueId}
           onSelect={handleSelectCue}
+          onToggleRehearsalMark={handleToggleRehearsalMark}
           fixtures={fixtures}
           viewMode={cueViewMode}
           onViewModeChange={setCueViewMode}
+          rehearsalMarkFilter={rehearsalMarkFilter}
+          onRehearsalMarkFilterChange={setRehearsalMarkFilter}
         />
       ) : (
         <CueTimeline
@@ -536,9 +550,12 @@ function App() {
           selectedCueId={selectedCueId}
           onSelect={handleSelectCue}
           onReorder={handleReorderCues}
+          onToggleRehearsalMark={handleToggleRehearsalMark}
           fixtures={fixtures}
           viewMode={cueViewMode}
           onViewModeChange={setCueViewMode}
+          rehearsalMarkFilter={rehearsalMarkFilter}
+          onRehearsalMarkFilterChange={setRehearsalMarkFilter}
         />
       )}
 

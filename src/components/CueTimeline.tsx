@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { type Cue, hasCueFixtureDivergence, parseCueBrightness } from "../data/cues";
+import { type Cue, type RehearsalMark, REHEARSAL_MARKS, hasCueFixtureDivergence, parseCueBrightness } from "../data/cues";
 import { type LightFixture } from "../data/fixtures";
 
 interface Props {
@@ -9,10 +9,13 @@ interface Props {
   selectedCueId: string | null;
   onSelect: (cueId: string) => void;
   onReorder: (cues: Cue[]) => void;
+  onToggleRehearsalMark: (cueId: string, mark: RehearsalMark | null) => void;
   fixtures: LightFixture[];
   showHeader?: boolean;
   viewMode?: "list" | "timeline";
   onViewModeChange?: (mode: "list" | "timeline") => void;
+  rehearsalMarkFilter: RehearsalMark | null;
+  onRehearsalMarkFilterChange: (filter: RehearsalMark | null) => void;
 }
 
 export function CueTimeline({
@@ -22,15 +25,19 @@ export function CueTimeline({
   selectedCueId,
   onSelect,
   onReorder,
+  onToggleRehearsalMark,
   fixtures,
   showHeader = true,
   viewMode = "timeline",
   onViewModeChange,
+  rehearsalMarkFilter,
+  onRehearsalMarkFilterChange,
 }: Props) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [insertPosition, setInsertPosition] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [markPopoverCueId, setMarkPopoverCueId] = useState<string | null>(null);
   const dragLockRef = useRef<number>(0);
   const scrollSpeedRef = useRef<number>(0);
   const scrollRAFRef = useRef<number | null>(null);
@@ -347,6 +354,25 @@ export function CueTimeline({
   const showStartIndicator = isDragging && insertPosition === 0;
   const showEndIndicator = isDragging && insertPosition === cues.length;
 
+  const filteredCues = rehearsalMarkFilter
+    ? cues.filter((c) => c.rehearsalMark === rehearsalMarkFilter)
+    : cues;
+
+  const getMarkInfo = (mark: RehearsalMark | null) => {
+    if (!mark) return null;
+    return REHEARSAL_MARKS.find((m) => m.key === mark) ?? null;
+  };
+
+  const handleMarkClick = (e: React.MouseEvent, cueId: string) => {
+    e.stopPropagation();
+    setMarkPopoverCueId((prev) => (prev === cueId ? null : cueId));
+  };
+
+  const handleMarkSelect = (cueId: string, mark: RehearsalMark | null) => {
+    onToggleRehearsalMark(cueId, mark);
+    setMarkPopoverCueId(null);
+  };
+
   if (cues.length === 0) {
     return (
       <section className="panel cue-timeline-panel">
@@ -414,6 +440,31 @@ export function CueTimeline({
                 </button>
               </div>
             )}
+            <div className="rehearsal-mark-filter">
+              <span className="rehearsal-mark-filter-label">排练标记：</span>
+              <div className="rehearsal-mark-chips">
+                <button
+                  className={!rehearsalMarkFilter ? "chip active" : "chip"}
+                  onClick={() => onRehearsalMarkFilterChange(null)}
+                >
+                  全部
+                </button>
+                {REHEARSAL_MARKS.map((m) => (
+                  <button
+                    key={m.key}
+                    className={rehearsalMarkFilter === m.key ? "chip active" : "chip"}
+                    style={
+                      rehearsalMarkFilter === m.key
+                        ? { background: m.color, borderColor: m.color, color: "#fff" }
+                        : { borderColor: m.color, color: m.color }
+                    }
+                    onClick={() => onRehearsalMarkFilterChange(rehearsalMarkFilter === m.key ? null : m.key)}
+                  >
+                    {m.icon} {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button className="primary" onClick={onAdd}>
               新增Cue
             </button>
@@ -436,34 +487,36 @@ export function CueTimeline({
                 <span className="timeline-insert-label">插入到开头</span>
               </div>
             )}
-            {cues.map((cue, index) => {
+            {filteredCues.map((cue, filteredIndex) => {
+              const originalIndex = cues.indexOf(cue);
               const isSelected = cue.id === selectedCueId;
-              const isDraggingItem = draggedIndex === index;
+              const isDraggingItem = draggedIndex === originalIndex;
               const showBeforeIndicator =
                 isDragging &&
-                insertPosition === index &&
+                insertPosition === originalIndex &&
                 !showStartIndicator &&
-                draggedIndex !== index;
+                draggedIndex !== originalIndex;
               const showAfterIndicator =
                 isDragging &&
-                insertPosition === index + 1 &&
+                insertPosition === originalIndex + 1 &&
                 !showEndIndicator &&
-                draggedIndex !== index;
+                draggedIndex !== originalIndex;
               const diverged = hasCueFixtureDivergence(cue, fixtures);
               const brightnessColor = getBrightnessColor(cue);
+              const markInfo = getMarkInfo(cue.rehearsalMark);
 
               let transformClass = "";
               if (insertPosition !== null && draggedIndex !== null && draggedIndex !== insertPosition) {
                 if (draggedIndex < insertPosition) {
-                  if (index > draggedIndex && index < insertPosition) {
+                  if (originalIndex > draggedIndex && originalIndex < insertPosition) {
                     transformClass = " shift-left";
-                  } else if (index === draggedIndex) {
+                  } else if (originalIndex === draggedIndex) {
                     transformClass = " shift-left-leaving";
                   }
                 } else {
-                  if (index < draggedIndex && index >= insertPosition) {
+                  if (originalIndex < draggedIndex && originalIndex >= insertPosition) {
                     transformClass = " shift-right";
-                  } else if (index === draggedIndex) {
+                  } else if (originalIndex === draggedIndex) {
                     transformClass = " shift-right-leaving";
                   }
                 }
@@ -480,26 +533,27 @@ export function CueTimeline({
                     key={cue.id}
                     data-cue-id={cue.id}
                     ref={(el) => {
-                      cueWrappersRef.current[index] = el;
+                      cueWrappersRef.current[originalIndex] = el;
                     }}
                     className={`timeline-cue-wrapper${
                       isDraggingItem ? " dragging" : ""
                     }${transformClass}`}
                     draggable={!isMobile}
-                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragStart={(e) => handleDragStart(e, originalIndex)}
                     onDragEnd={handleDragEnd}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={(e) => handleDrop(e, index)}
+                    onDragOver={(e) => handleDragOver(e, originalIndex)}
+                    onDrop={(e) => handleDrop(e, originalIndex)}
                   >
                     <article
                       className={`timeline-cue${
                         isSelected ? " timeline-cue-selected" : ""
-                      }${diverged ? " timeline-cue-diverged" : ""}`}
+                      }${diverged ? " timeline-cue-diverged" : ""}${cue.rehearsalMark ? " timeline-cue-marked" : ""}`}
+                      style={cue.rehearsalMark && markInfo ? { borderLeftColor: markInfo.color } : undefined}
                       onClick={() => onSelect(cue.id)}
                     >
-                      <div className="timeline-cue-dot" />
+                      <div className="timeline-cue-dot" style={cue.rehearsalMark && markInfo ? { background: markInfo.color } : undefined} />
                       <div className="timeline-cue-index">
-                        {String(index + 1).padStart(2, "0")}
+                        {String(originalIndex + 1).padStart(2, "0")}
                       </div>
                       <div className="timeline-cue-content">
                         <div className="timeline-cue-header">
@@ -524,15 +578,57 @@ export function CueTimeline({
                             触发: {cue.triggerNote}
                           </p>
                         )}
-                        {diverged && (
-                          <span className="timeline-cue-diverged-badge">
-                            灯具已修改
-                          </span>
-                        )}
-                        {cue.versionNote && (
-                          <span className="timeline-cue-version">
-                            {cue.versionNote}
-                          </span>
+                        <div className="timeline-cue-badges">
+                          {diverged && (
+                            <span className="timeline-cue-diverged-badge">
+                              灯具已修改
+                            </span>
+                          )}
+                          {markInfo && (
+                            <button
+                              className="rehearsal-mark-badge"
+                              style={{ background: markInfo.color }}
+                              onClick={(e) => handleMarkClick(e, cue.id)}
+                            >
+                              {markInfo.icon} {markInfo.label}
+                            </button>
+                          )}
+                          {!markInfo && (
+                            <button
+                              className="rehearsal-mark-badge rehearsal-mark-badge-add"
+                              onClick={(e) => handleMarkClick(e, cue.id)}
+                            >
+                              + 标记
+                            </button>
+                          )}
+                          {cue.versionNote && (
+                            <span className="timeline-cue-version">
+                              {cue.versionNote}
+                            </span>
+                          )}
+                        </div>
+                        {markPopoverCueId === cue.id && (
+                          <div className="rehearsal-mark-popover" onClick={(e) => e.stopPropagation()}>
+                            <div className="rehearsal-mark-popover-title">排练标记</div>
+                            {REHEARSAL_MARKS.map((m) => (
+                              <button
+                                key={m.key}
+                                className={`rehearsal-mark-popover-item${cue.rehearsalMark === m.key ? " active" : ""}`}
+                                style={cue.rehearsalMark === m.key ? { background: m.color, color: "#fff", borderColor: m.color } : { color: m.color }}
+                                onClick={() => handleMarkSelect(cue.id, cue.rehearsalMark === m.key ? null : m.key)}
+                              >
+                                {m.icon} {m.label}
+                              </button>
+                            ))}
+                            {cue.rehearsalMark && (
+                              <button
+                                className="rehearsal-mark-popover-item rehearsal-mark-popover-clear"
+                                onClick={() => handleMarkSelect(cue.id, null)}
+                              >
+                                ✕ 清除标记
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                       {isMobile && (
@@ -542,9 +638,9 @@ export function CueTimeline({
                               className="timeline-move-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                moveCueToStart(index);
+                                moveCueToStart(originalIndex);
                               }}
-                              disabled={index === 0}
+                              disabled={originalIndex === 0}
                               title="移到开头"
                             >
                               ⏮
@@ -553,9 +649,9 @@ export function CueTimeline({
                               className="timeline-move-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                moveCue(index, "up");
+                                moveCue(originalIndex, "up");
                               }}
-                              disabled={index === 0}
+                              disabled={originalIndex === 0}
                               title="上移"
                             >
                               ↑
@@ -564,9 +660,9 @@ export function CueTimeline({
                               className="timeline-move-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                moveCue(index, "down");
+                                moveCue(originalIndex, "down");
                               }}
-                              disabled={index === cues.length - 1}
+                              disabled={originalIndex === cues.length - 1}
                               title="下移"
                             >
                               ↓
@@ -575,9 +671,9 @@ export function CueTimeline({
                               className="timeline-move-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                moveCueToEnd(index);
+                                moveCueToEnd(originalIndex);
                               }}
-                              disabled={index === cues.length - 1}
+                              disabled={originalIndex === cues.length - 1}
                               title="移到末尾"
                             >
                               ⏭
@@ -615,7 +711,9 @@ export function CueTimeline({
       </div>
 
       <div className="timeline-footer">
-        <span className="timeline-count">共 {cues.length} 个Cue</span>
+        <span className="timeline-count">
+          共 {cues.length} 个Cue{rehearsalMarkFilter && ` · 筛选显示 ${filteredCues.length} 个`}
+        </span>
         {!isMobile && (
           <span className="timeline-hint">拖拽Cue调整顺序 · 拖动到边缘自动滚动</span>
         )}

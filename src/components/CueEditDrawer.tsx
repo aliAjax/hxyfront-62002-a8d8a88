@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { type Cue, EMPTY_CUE, parseCueFixtures, parseCueBrightness, hasBrightnessField, getCueFixtureDiffs, syncCueBrightnessFromFixtures, buildFixturesString } from "../data/cues";
+import { type Cue, type RehearsalMark, REHEARSAL_MARKS, EMPTY_CUE, parseCueFixtures, parseCueBrightness, hasBrightnessField, getCueFixtureDiffs, syncCueBrightnessFromFixtures, buildFixturesString } from "../data/cues";
 import { LIGHT_TYPE_COLORS, type LightFixture, type LightType } from "../data/fixtures";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
@@ -370,6 +370,38 @@ export function CueEditDrawer({ open, cue, allCues, fixtures, onClose, onSave }:
                 onChange={(e) => handleChange("versionNote", e.target.value)}
                 placeholder="例如：版本A"
               />
+            </label>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <span>排练标记</span>
+              <div className="rehearsal-mark-editor">
+                {REHEARSAL_MARKS.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`rehearsal-mark-editor-btn${form.rehearsalMark === m.key ? " active" : ""}`}
+                    style={
+                      form.rehearsalMark === m.key
+                        ? { background: m.color, borderColor: m.color, color: "#fff" }
+                        : { borderColor: m.color, color: m.color }
+                    }
+                    onClick={() => setForm((prev) => ({ ...prev, rehearsalMark: prev.rehearsalMark === m.key ? null : m.key as RehearsalMark }))}
+                  >
+                    {m.icon} {m.label}
+                  </button>
+                ))}
+                {form.rehearsalMark && (
+                  <button
+                    type="button"
+                    className="rehearsal-mark-editor-clear"
+                    onClick={() => setForm((prev) => ({ ...prev, rehearsalMark: null }))}
+                  >
+                    ✕ 清除标记
+                  </button>
+                )}
+              </div>
             </label>
           </div>
 

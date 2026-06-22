@@ -2,6 +2,15 @@ import { FIXTURES, type LightFixture, type LightType } from "./fixtures";
 
 export type { LightFixture };
 
+export type RehearsalMark = "blocking" | "directorReview" | "frozen" | "skipped";
+
+export const REHEARSAL_MARKS: { key: RehearsalMark; label: string; color: string; icon: string }[] = [
+  { key: "blocking", label: "待走位确认", color: "#f59e0b", icon: "🚶" },
+  { key: "directorReview", label: "导演待看", color: "#8b5cf6", icon: "👁" },
+  { key: "frozen", label: "已冻结", color: "#06b6d4", icon: "❄" },
+  { key: "skipped", label: "临时跳过", color: "#94a3b8", icon: "⏭" },
+];
+
 export interface Cue {
   id: string;
   number: string;
@@ -10,6 +19,7 @@ export interface Cue {
   brightnessChange: string;
   triggerNote: string;
   versionNote: string;
+  rehearsalMark: RehearsalMark | null;
 }
 
 export const INITIAL_CUES: Cue[] = [
@@ -21,6 +31,7 @@ export const INITIAL_CUES: Cue[] = [
     brightnessChange: "亮度65%",
     triggerNote: "二幕开场",
     versionNote: "版本A",
+    rehearsalMark: null,
   },
   {
     id: "cue-18",
@@ -30,6 +41,7 @@ export const INITIAL_CUES: Cue[] = [
     brightnessChange: "亮度100%",
     triggerNote: "需演员走位确认",
     versionNote: "版本A",
+    rehearsalMark: "blocking",
   },
   {
     id: "cue-24",
@@ -39,6 +51,7 @@ export const INITIAL_CUES: Cue[] = [
     brightnessChange: "亮度80%",
     triggerNote: "谢幕音乐起",
     versionNote: "版本B",
+    rehearsalMark: null,
   },
 ];
 
@@ -50,6 +63,7 @@ export const EMPTY_CUE: Cue = {
   brightnessChange: "",
   triggerNote: "",
   versionNote: "",
+  rehearsalMark: null,
 };
 
 const TYPE_KEYWORDS: Record<string, LightType> = {
@@ -311,6 +325,7 @@ const COMPARE_FIELDS: (keyof Cue)[] = [
   "brightnessChange",
   "triggerNote",
   "versionNote",
+  "rehearsalMark",
 ];
 
 function getFieldLabel(field: keyof Cue): FieldChangeType {
@@ -322,6 +337,7 @@ function getFieldLabel(field: keyof Cue): FieldChangeType {
     brightnessChange: "brightnessChange",
     triggerNote: "triggerNote",
     versionNote: "versionNote",
+    rehearsalMark: "number",
   };
   return labels[field] || field;
 }
@@ -652,6 +668,7 @@ export function createVersionSnapshot(
 }
 
 export function normalizeCueData(cue: any): Cue {
+  const validMarks: RehearsalMark[] = ["blocking", "directorReview", "frozen", "skipped"];
   const normalized: Cue = {
     id: cue.id || `cue-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     number: cue.number || cue.cueNumber || "",
@@ -660,6 +677,7 @@ export function normalizeCueData(cue: any): Cue {
     brightnessChange: cue.brightnessChange || cue.brightness || "",
     triggerNote: cue.triggerNote || cue.trigger || "",
     versionNote: cue.versionNote || cue.version || "",
+    rehearsalMark: validMarks.includes(cue.rehearsalMark) ? cue.rehearsalMark : null,
   };
 
   if (typeof cue.brightness === "number") {

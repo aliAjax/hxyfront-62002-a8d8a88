@@ -1338,6 +1338,20 @@ textarea {
   flex-wrap: wrap;
 }
 
+.stage-plan-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stage-plan-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
 .stage-plan-selection-badge {
   display: inline-flex;
   align-items: center;

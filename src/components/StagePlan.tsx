@@ -6,6 +6,22 @@ const STAGE_VIEWBOX = "0 0 900 600";
 
 const ALL_TYPES: LightType[] = ["面光", "侧光", "逆光", "效果光"];
 
+type BrightnessLevel = "off" | "low" | "medium" | "high";
+
+const BRIGHTNESS_LEVELS: { key: BrightnessLevel; label: string; color: string }[] = [
+  { key: "off", label: "已熄灭", color: "#94a3b8" },
+  { key: "low", label: "低亮度", color: "#06b6d4" },
+  { key: "medium", label: "中亮度", color: "#f59e0b" },
+  { key: "high", label: "高亮度", color: "#ef4444" },
+];
+
+function getBrightnessLevel(brightness: number): BrightnessLevel {
+  if (brightness === 0) return "off";
+  if (brightness <= 40) return "low";
+  if (brightness <= 70) return "medium";
+  return "high";
+}
+
 interface Props {
   fixtures: LightFixture[];
   selectedFixtureIds: Set<string>;
@@ -16,10 +32,15 @@ interface Props {
 export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelection, onImportClick }: Props) {
   const [detailFixture, setDetailFixture] = useState<LightFixture | null>(null);
   const [filter, setFilter] = useState<LightType | null>(null);
+  const [brightnessFilter, setBrightnessFilter] = useState<BrightnessLevel | null>(null);
 
-  const filtered = filter
-    ? fixtures.filter((f) => f.type === filter)
-    : fixtures;
+  const filtered = fixtures.filter((f) => {
+    if (filter && f.type !== filter) return false;
+    if (brightnessFilter && getBrightnessLevel(f.brightness) !== brightnessFilter) return false;
+    return true;
+  });
+
+  const visibleSelectedCount = filtered.filter((f) => selectedFixtureIds.has(f.id)).length;
 
   const handleFixtureClick = (fixture: LightFixture, e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -44,8 +65,10 @@ export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelecti
         </div>
         <div className="stage-plan-header-right">
           {selectedFixtureIds.size > 0 && (
-            <span className="stage-plan-selection-badge">
-              已选 {selectedFixtureIds.size} 台灯具
+            <span className="stage-plan-selection-badge" title={visibleSelectedCount !== selectedFixtureIds.size ? `筛选后可见 ${visibleSelectedCount} 台，共选中 ${selectedFixtureIds.size} 台` : undefined}>
+              {visibleSelectedCount !== selectedFixtureIds.size
+                ? `已选 ${visibleSelectedCount}/${selectedFixtureIds.size} 台灯具`
+                : `已选 ${selectedFixtureIds.size} 台灯具`}
             </span>
           )}
           {onImportClick && (
@@ -58,27 +81,55 @@ export function StagePlan({ fixtures, selectedFixtureIds, onToggleFixtureSelecti
               导入数据
             </button>
           )}
-          <div className="stage-plan-chips">
-            <button
-              className={!filter ? "chip active" : "chip"}
-              onClick={() => setFilter(null)}
-            >
-              全部
-            </button>
-            {ALL_TYPES.map((t) => (
+          <div className="stage-plan-filter-group">
+            <div className="stage-plan-filter-label">灯区：</div>
+            <div className="stage-plan-chips">
               <button
-                key={t}
-                className={filter === t ? "chip active" : "chip"}
-                style={
-                  filter === t
-                    ? { background: LIGHT_TYPE_COLORS[t], borderColor: LIGHT_TYPE_COLORS[t], color: "#fff" }
-                    : {}
-                }
-                onClick={() => setFilter(filter === t ? null : t)}
+                className={!filter ? "chip active" : "chip"}
+                onClick={() => setFilter(null)}
               >
-                {t}
+                全部
               </button>
-            ))}
+              {ALL_TYPES.map((t) => (
+                <button
+                  key={t}
+                  className={filter === t ? "chip active" : "chip"}
+                  style={
+                    filter === t
+                      ? { background: LIGHT_TYPE_COLORS[t], borderColor: LIGHT_TYPE_COLORS[t], color: "#fff" }
+                      : {}
+                  }
+                  onClick={() => setFilter(filter === t ? null : t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="stage-plan-filter-group">
+            <div className="stage-plan-filter-label">亮度状态：</div>
+            <div className="stage-plan-chips">
+              <button
+                className={!brightnessFilter ? "chip active" : "chip"}
+                onClick={() => setBrightnessFilter(null)}
+              >
+                全部
+              </button>
+              {BRIGHTNESS_LEVELS.map((b) => (
+                <button
+                  key={b.key}
+                  className={brightnessFilter === b.key ? "chip active" : "chip"}
+                  style={
+                    brightnessFilter === b.key
+                      ? { background: b.color, borderColor: b.color, color: "#fff" }
+                      : { borderColor: b.color, color: b.color }
+                  }
+                  onClick={() => setBrightnessFilter(brightnessFilter === b.key ? null : b.key)}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
